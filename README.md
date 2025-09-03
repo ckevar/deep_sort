@@ -1,4 +1,7 @@
-# Deep SORT
+# Deep SORT at Multi-Class
+
+## News:
+- the Wide Residual Network (feature extractor model) is implemented in using pytorch.
 
 ## Introduction
 
