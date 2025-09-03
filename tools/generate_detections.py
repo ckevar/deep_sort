@@ -149,7 +149,7 @@ def generate_detections(encoder, mot_dir, output_dir, detection_dir=None):
     for sequence in os.listdir(mot_dir):
         print("Processing %s" % sequence)
         sequence_dir = os.path.join(mot_dir, sequence)
-
+        print(sequence_dir)
         image_dir = os.path.join(sequence_dir, "img1")
         image_filenames = {
             int(os.path.splitext(f)[0]): os.path.join(image_dir, f)
