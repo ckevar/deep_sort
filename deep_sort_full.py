@@ -93,6 +93,8 @@ def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extract
     else:
         image_size = None
 
+    """
+
     if len(image_filenames) > 0:
         min_frame_idx = min(image_filenames.keys())
         max_frame_idx = max(image_filenames.keys())
@@ -101,6 +103,7 @@ def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extract
         max_frame_idx = int(detections[:, 0].max())
     print(f"\n min frame idx: {min_frame_idx}\n max_frame_idx: {max_frame_idx}\n")
     print(f"\n min_frame_idx name: {image_filenames[min_frame_idx]}\n")
+    """
     info_filename = os.path.join(sequence_dir, "seqinfo.ini")
     if os.path.exists(info_filename):
         with open(info_filename, "r") as f:
@@ -117,8 +120,8 @@ def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extract
         "image_filenames": image_filenames,
         "detector": detector,
         "image_size": image_size,
-        "min_frame_idx": min_frame_idx,
-        "max_frame_idx": max_frame_idx,
+        #"min_frame_idx": min_frame_idx,
+        #"max_frame_idx": max_frame_idx,
         "feature_extractor": feature_extractor,
         "update_ms": update_ms
     }

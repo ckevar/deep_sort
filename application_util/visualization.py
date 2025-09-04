@@ -52,6 +52,10 @@ def create_unique_color_uchar(tag, hue_step=0.41):
     r, g, b = create_unique_color_float(tag, hue_step)
     return int(255*r), int(255*g), int(255*b)
 
+def sort_filenames(image_filenames):
+    keys = list(image_filenames.keys())
+    keys.sort()
+    return keys
 
 class NoVisualization(object):
     """
@@ -60,8 +64,8 @@ class NoVisualization(object):
     """
 
     def __init__(self, seq_info):
-        self.frame_idx = seq_info["min_frame_idx"]
-        self.last_idx = seq_info["max_frame_idx"]
+        self.keys = sort_filenames(seq_info["image_filenames"])
+        self.seq_length = len(self.keys)
 
     def set_image(self, image):
         pass
@@ -76,9 +80,10 @@ class NoVisualization(object):
         pass
 
     def run(self, frame_callback):
-        while self.frame_idx <= self.last_idx:
-            frame_callback(self, self.frame_idx)
-            self.frame_idx += 1
+        frame_idx = 0
+        while frame_idx < self.seq_length:
+            frame_callback(self, self.keys[frame_idx])
+            frame_idx += 1
 
 
 class Visualization(object):
@@ -93,16 +98,17 @@ class Visualization(object):
         self.viewer = ImageViewer(
             update_ms, image_shape, "Figure %s" % seq_info["sequence_name"])
         self.viewer.thickness = 2
-        self.frame_idx = seq_info["min_frame_idx"]
-        self.last_idx = seq_info["max_frame_idx"]
+        self.frame_idx = 0
+        self.keys = sort_filenames(seq_info["image_filenames"])
+        self.seq_length = len(self.keys)
 
     def run(self, frame_callback):
         self.viewer.run(lambda: self._update_fun(frame_callback))
 
     def _update_fun(self, frame_callback):
-        if self.frame_idx > self.last_idx:
+        if self.frame_idx >= self.seq_length:
             return False  # Terminate
-        frame_callback(self, self.frame_idx)
+        frame_callback(self, self.keys[self.frame_idx])
         self.frame_idx += 1
         return True
 
