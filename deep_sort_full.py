@@ -16,7 +16,7 @@ from deep_sort.tracker import Tracker
 import time
 
 
-def gather_sequence_info(sequence_dir, detector_file, feature_extractor_file):
+def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extractor_file):
     """Gather sequence information, such as image filenames, detections,
     groundtruth (if available).
 
@@ -42,11 +42,20 @@ def gather_sequence_info(sequence_dir, detector_file, feature_extractor_file):
         * max_frame_idx: Index of the last frame.
 
     """
-    image_dir = os.path.join(sequence_dir, "img1")
+    if "MOT17" == data_type:
+        image_dir = os.path.join(sequence_dir, "img1")
+    elif "KITTI" == data_type:
+        image_dir = sequence_dir
+
     image_filenames = {
         int(os.path.splitext(f)[0]): os.path.join(image_dir, f)
         for f in os.listdir(image_dir)}
-    groundtruth_file = os.path.join(sequence_dir, "gt/gt.txt")
+
+    print("image_filenames keys")
+    for key in image_filenames.keys():
+        print(key, image_filenames[key].split('/')[-1])
+        break
+
 
     # Load Detector
     if "yolo" in detector_file:
@@ -77,11 +86,6 @@ def gather_sequence_info(sequence_dir, detector_file, feature_extractor_file):
         print(f"\n  Model {feature_extractor_file} not supported.\n")
         exit(1)
 
-
-    groundtruth = None
-    if os.path.exists(groundtruth_file):
-        groundtruth = np.loadtxt(groundtruth_file, delimiter=',')
-
     if len(image_filenames) > 0:
         image = cv2.imread(next(iter(image_filenames.values())),
                            cv2.IMREAD_GRAYSCALE)
@@ -95,7 +99,8 @@ def gather_sequence_info(sequence_dir, detector_file, feature_extractor_file):
     else:
         min_frame_idx = int(detections[:, 0].min())
         max_frame_idx = int(detections[:, 0].max())
-
+    print(f"\n min frame idx: {min_frame_idx}\n max_frame_idx: {max_frame_idx}\n")
+    print(f"\n min_frame_idx name: {image_filenames[min_frame_idx]}\n")
     info_filename = os.path.join(sequence_dir, "seqinfo.ini")
     if os.path.exists(info_filename):
         with open(info_filename, "r") as f:
@@ -111,7 +116,6 @@ def gather_sequence_info(sequence_dir, detector_file, feature_extractor_file):
         "sequence_name": os.path.basename(sequence_dir),
         "image_filenames": image_filenames,
         "detector": detector,
-        "groundtruth": groundtruth,
         "image_size": image_size,
         "min_frame_idx": min_frame_idx,
         "max_frame_idx": max_frame_idx,
@@ -144,7 +148,7 @@ def run(sequence_dir, data_type, detector_file, feature_extractor_file,
         output_file, min_confidence, nms_max_overlap, 
         min_detection_height, max_cosine_distance, nn_budget, display):
 
-    print(f"Processing sequence {sequence_dir}.")
+    print(f"\n  Processing Sequence: {sequence_dir}.\n")
 
     global total_et
     global total_frame
@@ -178,7 +182,7 @@ def run(sequence_dir, data_type, detector_file, feature_extractor_file,
 
     """
 
-    seq_info = gather_sequence_info(sequence_dir, detector_file, feature_extractor_file)
+    seq_info = gather_sequence_info(sequence_dir, data_type, detector_file, feature_extractor_file)
     metric = nn_matching.NearestNeighborDistanceMetric(
         "cosine", max_cosine_distance, nn_budget)
     tracker = Tracker(metric)
@@ -189,7 +193,9 @@ def run(sequence_dir, data_type, detector_file, feature_extractor_file,
     def frame_callback(vis, frame_idx):
         global total_et
         global total_frame
-        #print("Processing frame %05d" % frame_idx)
+        print("Processing frame %05d" % frame_idx)
+
+        print(f"\n frame name: {seq_info['image_filenames'][frame_idx]}")
 
         frame = cv2.imread(seq_info["image_filenames"][frame_idx], cv2.IMREAD_COLOR)
 
@@ -247,21 +253,20 @@ def run(sequence_dir, data_type, detector_file, feature_extractor_file,
 
 def store_results(output_file, results, data_type):
 
-    f = open(output_file, 'w')
     if "MOT17" == data_type:
-        for row in results:
-            print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1' % (
-                row[0], row[1], row[2], row[3], row[4], row[5]),file=f)
-
+        save_format = "%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1"
     elif "KITTI" == data_type:
-        print("\n We are working on it. We can copy it from fairmot.")
-        f.close()
-        exit(1)
+        save_format = "%d %d pedestrian 0 0 -10 %.2f %.2f %.2f %.2f -10 -10 -10 -1000 -1000 -1000 -10"
+        results = np.array(results)
+        results[:, 4:] += results[:, 2:4]
     else:
         print("\n Data type {data_type} not supported.")
-        f.close()
         exit(1)
 
+    f = open(output_file, 'w')
+    for row in results:
+        print(save_format % (
+            row[0], row[1], row[2], row[3], row[4], row[5]),file=f)
     f.close()
 
 
