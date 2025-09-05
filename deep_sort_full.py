@@ -47,12 +47,6 @@ def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extract
         int(os.path.splitext(f)[0]): os.path.join(image_dir, f)
         for f in os.listdir(image_dir)}
 
-    print("image_filenames keys")
-    for key in image_filenames.keys():
-        print(key, image_filenames[key].split('/')[-1])
-        break
-
-
     # Load Detector
     if "yolo" in detector_file:
         from ultralytics import YOLO
