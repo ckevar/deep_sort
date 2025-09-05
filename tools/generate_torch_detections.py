@@ -42,22 +42,18 @@ class ImageTorchEnconder(object):
         # Design Hyper Parameters
         self.feature_dim = 128 # WRN design in the deepsort paper
         self.image_shape = [128, 64, 3] # WRN design in the deepsort paper
-
-        print("   NUM CLASSES", num_classes)
-
         self.model = MarsSmall128(num_classes=num_classes)
         load_torchWRN_model(checkpoint_filename, self.model)
+        self.model.to("cuda")
         self.model = self.model.eval()
-
        
     def __call__(self, data_x, batch_size=1):
         data_len = data_x.shape[0]
-        img = self.transform(data_x)
+        img = torch.stack([self.transform(imgx) for imgx in data_x])
+        #img = self.transform(data_x)
 
         feats = __run_in_batches__(self.model, img, data_len, batch_size)
 
-        print("Feature shapes:", feats.shape)
-        exit(0)
         return feats
 
 
@@ -65,16 +61,18 @@ def create_box_encoder(model_filename, num_classes, batch_size=32):
     image_encoder = ImageTorchEnconder(model_filename, num_classes)
     image_shape = image_encoder.image_shape
 
-    def  enconder(image, boxes):
+    def encoder(image, boxes):
         image_patches = []
         for box in boxes:
             patch = extract_image_patch(image, box, image_shape[:2])
-            if None == patch:
+            if patch is None:
                 print("\n  [WARNING:] Failed to extract image patch: %s.\n" % str(box))
                 patch = np.random.uniform(0., 255., image_shape).astype(np.uint8)
-                image_patches.append(patch)
-            image_patches = np.asarray(image_patches)
-            return image_encoder(image_patches, batch_size)
+            image_patches.append(patch)
+        image_patches = np.asarray(image_patches)
+        return image_encoder(image_patches, batch_size)
+    
+    return encoder
 
 
 

@@ -56,6 +56,7 @@ def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extract
         exit(1)
 
     # Load feature extractor 
+
     if feature_extractor_file.endswith("pb"):
         from tools.generate_detections import create_box_encoder
         feature_extractor = create_box_encoder(feature_extractor_file, batch_size=32)
@@ -72,6 +73,7 @@ def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extract
             print(f"\n  Model {feature_extractor_file} not supported, unknown train_ids.\n")
             exit(1)
         feature_extractor = create_box_encoder(feature_extractor_file, train_ids, batch_size=32)
+
     else:
         print(f"\n  Model {feature_extractor_file} not supported.\n")
         exit(1)
@@ -161,7 +163,6 @@ def run(sequence_dir, data_type, detector_file, feature_extractor_file,
         If True, show visualization of intermediate tracking results.
 
     """
-
     seq_info = gather_sequence_info(sequence_dir, data_type, detector_file, feature_extractor_file)
     metric = nn_matching.NearestNeighborDistanceMetric(
         "cosine", max_cosine_distance, nn_budget)
@@ -307,10 +308,12 @@ def mk_output_dir(root_dir, results_dir):
     return output_dir
 
 if __name__ == "__main__":
+
     args = parse_args()
 
     sequences = os.listdir(args.data_dir)
     output_dir = mk_output_dir(args.data_dir, args.experiment_name)
+
 
     for seq_dir in sequences:
         output_file = f"{output_dir}/{seq_dir}.txt"
