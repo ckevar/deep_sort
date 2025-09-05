@@ -18,7 +18,6 @@ import time
 
 def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extractor_file):
     """Gather sequence information, such as image filenames, detections,
-    groundtruth (if available).
 
     Parameters
     ----------
@@ -36,10 +35,7 @@ def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extract
         * image_filenames: A dictionary that maps frame indices to image
           filenames.
         * detector: A detector object.
-        * groundtruth: A numpy array of ground truth in MOTChallenge format.
         * image_size: Image size (height, width).
-        * min_frame_idx: Index of the first frame.
-        * max_frame_idx: Index of the last frame.
 
     """
     if "MOT17" == data_type:
@@ -93,17 +89,6 @@ def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extract
     else:
         image_size = None
 
-    """
-
-    if len(image_filenames) > 0:
-        min_frame_idx = min(image_filenames.keys())
-        max_frame_idx = max(image_filenames.keys())
-    else:
-        min_frame_idx = int(detections[:, 0].min())
-        max_frame_idx = int(detections[:, 0].max())
-    print(f"\n min frame idx: {min_frame_idx}\n max_frame_idx: {max_frame_idx}\n")
-    print(f"\n min_frame_idx name: {image_filenames[min_frame_idx]}\n")
-    """
     info_filename = os.path.join(sequence_dir, "seqinfo.ini")
     if os.path.exists(info_filename):
         with open(info_filename, "r") as f:
@@ -120,8 +105,6 @@ def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extract
         "image_filenames": image_filenames,
         "detector": detector,
         "image_size": image_size,
-        #"min_frame_idx": min_frame_idx,
-        #"max_frame_idx": max_frame_idx,
         "feature_extractor": feature_extractor,
         "update_ms": update_ms
     }
@@ -196,9 +179,7 @@ def run(sequence_dir, data_type, detector_file, feature_extractor_file,
     def frame_callback(vis, frame_idx):
         global total_et
         global total_frame
-        print("Processing frame %05d" % frame_idx)
-
-        print(f"\n frame name: {seq_info['image_filenames'][frame_idx]}")
+        #print("Processing frame %05d" % frame_idx)
 
         frame = cv2.imread(seq_info["image_filenames"][frame_idx], cv2.IMREAD_COLOR)
 
