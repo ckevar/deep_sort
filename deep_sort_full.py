@@ -282,6 +282,8 @@ def parse_args():
     parser.add_argument(
         "--display", help="Show intermediate tracking results",
         default=True, type=bool_string)
+
+
     # New {
     parser.add_argument(
         "--experiment_name", help="Experiment name. It will create a folder with "
@@ -295,7 +297,11 @@ def parse_args():
     parser.add_argument(
         "--data_type", help="It supports MOT and KITTI formats",
         default=None, required=True)
+    parser.add_argument(
+        "--overwrite", type=bool, help="If True, it processes the entire dataset from scratch. If false, it restores from the cache file.",
+        default=False)
     # }
+
     return parser.parse_args()
 
 def mk_output_dir(root_dir, results_dir):
@@ -307,22 +313,46 @@ def mk_output_dir(root_dir, results_dir):
         pass
     return output_dir
 
+class Cache(object):
+    def __init__(self, experiment_name, overwrite=False):
+        self.cache_filename = '.cache_' + experiment_name
+        if not os.path.isfile(self.cache_filename) or overwrite:
+            fd = open(self.cache_filename, 'w')
+            fd.close()
+
+    def processed(self, seq_dir):
+        cached_seq = False
+        with open(self.cache_filename, 'r') as fd:
+            cache_list = fd.read()
+            cached_seq = seq_dir in cache_list
+
+        return cached_seq 
+
+    def ack(self, seq_dir):
+        with open(self.cache_filename, 'a') as fd:
+            fd.write(f"{seq_dir}\n")
+
 if __name__ == "__main__":
 
     args = parse_args()
 
     sequences = os.listdir(args.data_dir)
     output_dir = mk_output_dir(args.data_dir, args.experiment_name)
-
+    cache = Cache(args.experiment_name, args.overwrite)
 
     for seq_dir in sequences:
+
+        if cache.processed(seq_dir):
+            continue
+
         output_file = f"{output_dir}/{seq_dir}.txt"
         sequence_dir = f"{args.data_dir}/{seq_dir}"
-        
+
         run(sequence_dir, args.data_type, args.load_detector, args.load_feature_extractor, 
             output_file, args.min_confidence, args.nms_max_overlap, 
             args.min_detection_height, args.max_cosine_distance, args.nn_budget,
             args.display)
 
+        cache.ack(seq_dir)
 
 
