@@ -12,19 +12,45 @@ from application_util import visualization
 from deep_sort import nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
+from sequenceloader import SequenceLoader
 
 import time
 
 
-def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extractor_file):
+def load_detector(detector_file):
+    if "yolo" in detector_file:
+        from ultralytics import YOLO
+        return YOLO(detector_file)
+    else:
+        raise ValueError(f"Detector {detector_file} not supported.\n")
+
+def load_feature_extractor(feature_extractor_file):
+    if feature_extractor_file.endswith("pb"):
+        from tools.generate_detections import create_box_encoder
+        return create_box_encoder(feature_extractor_file, batch_size=32)
+
+    elif feature_extractor_file.endswith("pth"):
+        from tools.generate_torch_detections import create_box_encoder
+        if "mot17" in feature_extractor_file: train_ids = 388
+        elif "kitti" in feature_extractor_file: train_ids = 450
+        elif "waymo" in feature_extractor_file: train_ids = 20982
+        else: raise ValueError(f"Model {feature_extractor_file} not supported, unknow train_ids.\n")
+        return create_box_encoder(feature_extractor_file, train_ids, batch_size=32)
+
+    else:
+        raise ValueError(f"Mode {feature_extractor_file} not supported.\n")
+ 
+
+
+def gather_sequence_info(sequence_dir, data_type):
     """Gather sequence information, such as image filenames, detections,
 
     Parameters
     ----------
     sequence_dir : str
         Path to the MOTChallenge sequence directory.
-    detector_file : str
-        Path to the detector file.
+    data_type: str
+        Dataset format MOT17 or KITTI.
 
     Returns
     -------
@@ -34,57 +60,32 @@ def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extract
         * sequence_name: Name of the sequence
         * image_filenames: A dictionary that maps frame indices to image
           filenames.
-        * detector: A detector object.
         * image_size: Image size (height, width).
+        * update_ms: frame rate of the sequence.
 
     """
+
+    image_size = None
+    update_ms = None
     if "MOT17" == data_type:
         image_dir = os.path.join(sequence_dir, "img1")
     elif "KITTI" == data_type:
         image_dir = sequence_dir
+    else:
+        raise ValueError(f"--data_type only supports MOT17 or KITTI.\n")
 
+    # Image filenames
     image_filenames = {
         int(os.path.splitext(f)[0]): os.path.join(image_dir, f)
         for f in os.listdir(image_dir)}
 
-    # Load Detector
-    if "yolo" in detector_file:
-        from ultralytics import YOLO
-        detector = YOLO(detector_file)
-    else:
-        print(f"\n  Detector {detector_file} not supported yet.\n")
-        exit(1)
-
-    # Load feature extractor 
-
-    if feature_extractor_file.endswith("pb"):
-        from tools.generate_detections import create_box_encoder
-        feature_extractor = create_box_encoder(feature_extractor_file, batch_size=32)
-
-    elif feature_extractor_file.endswith("pth"):
-        from tools.generate_torch_detections import create_box_encoder
-        if "mot17" in feature_extractor_file:
-            train_ids = 388
-        elif "kitti" in feature_extractor_file:
-            train_ids = 450
-        elif "waymo" in feature_extractor_file:
-            train_ids = 20982
-        else:
-            print(f"\n  Model {feature_extractor_file} not supported, unknown train_ids.\n")
-            exit(1)
-        feature_extractor = create_box_encoder(feature_extractor_file, train_ids, batch_size=32)
-
-    else:
-        print(f"\n  Model {feature_extractor_file} not supported.\n")
-        exit(1)
-
+    # Image size
     if len(image_filenames) > 0:
         image = cv2.imread(next(iter(image_filenames.values())),
                            cv2.IMREAD_GRAYSCALE)
         image_size = image.shape
-    else:
-        image_size = None
 
+    # Sequence Frame Rate (FPS)
     info_filename = os.path.join(sequence_dir, "seqinfo.ini")
     if os.path.exists(info_filename):
         with open(info_filename, "r") as f:
@@ -93,15 +94,11 @@ def gather_sequence_info(sequence_dir, data_type, detector_file, feature_extract
                 s for s in line_splits if isinstance(s, list) and len(s) == 2)
 
         update_ms = 1000 / int(info_dict["frameRate"])
-    else:
-        update_ms = None
 
     seq_info = {
         "sequence_name": os.path.basename(sequence_dir),
         "image_filenames": image_filenames,
-        "detector": detector,
         "image_size": image_size,
-        "feature_extractor": feature_extractor,
         "update_ms": update_ms
     }
     return seq_info
@@ -126,7 +123,7 @@ def unravel_detections_confs(detections, min_height):
 total_et = 0
 total_frame = 0
 
-def run(sequence_dir, data_type, detector_file, feature_extractor_file, 
+def run(sequence_dir, data_type, detector, feature_extractor, 
         output_file, min_confidence, nms_max_overlap, 
         min_detection_height, max_cosine_distance, nn_budget, display):
 
@@ -141,8 +138,12 @@ def run(sequence_dir, data_type, detector_file, feature_extractor_file,
     ----------
     sequence_dir : str
         Path to the MOTChallenge sequence directory.
-    detector_file : str
-        Path to the detections file.
+    data_type : str
+        Dataset format, MOT17 or KITTI.
+    detector : object
+        Detector Model.
+    feature_extractor: 
+        Feature Extractor Model.
     output_file : str
         Path to the tracking output file. This file will contain the tracking
         results on completion.
@@ -163,7 +164,7 @@ def run(sequence_dir, data_type, detector_file, feature_extractor_file,
         If True, show visualization of intermediate tracking results.
 
     """
-    seq_info = gather_sequence_info(sequence_dir, data_type, detector_file, feature_extractor_file)
+    seq_info = gather_sequence_info(sequence_dir, data_type)
     metric = nn_matching.NearestNeighborDistanceMetric(
         "cosine", max_cosine_distance, nn_budget)
     tracker = Tracker(metric)
@@ -180,10 +181,10 @@ def run(sequence_dir, data_type, detector_file, feature_extractor_file,
 
         start_time = time.time()
 
-        detections = seq_info["detector"](frame, verbose=False)[0]
+        detections = detector(frame, verbose=False)[0]
         detections, confs = unravel_detections_confs(detections, min_detection_height)
 
-        feats = seq_info["feature_extractor"](frame, detections)
+        feats = feature_extractor(frame, detections)
 
         # Load image and generate detections.
         detections = create_detections(detections, confs, feats)
@@ -286,7 +287,7 @@ def parse_args():
 
     # New {
     parser.add_argument(
-        "--experiment_name", help="Experiment name. It will create a folder with "
+        "--experiment_name", help="Results directory (not path)."
         "results.", default=None, required=True)
     parser.add_argument(
         "--load_feature_extractor", help="Feature extractor model file",
@@ -296,15 +297,18 @@ def parse_args():
         "KITTI and WaymoV2-MOT format", default=None, required=True)
     parser.add_argument(
         "--data_type", help="It supports MOT and KITTI formats",
-        default=None, required=True)
+        default="MOT")
     parser.add_argument(
-        "--overwrite", type=bool, help="If True, it processes the entire dataset from scratch. If false, it restores from the cache file.",
+        "--overwrite", type=bool, help="If True, it processes the entire dataset from scratch. If false, it resumes from the cache file, if there exists a cache file.",
         default=False)
     # }
 
     return parser.parse_args()
 
 def mk_output_dir(root_dir, results_dir):
+    if '/' == root_dir[-1]:
+        root_dir = root_dir[:-1]
+
     dirs = root_dir.split('/')
     output_dir = '/'.join(dirs[:-1]) + f"/results/{results_dir}"
     try:
@@ -339,6 +343,8 @@ if __name__ == "__main__":
     sequences = os.listdir(args.data_dir)
     output_dir = mk_output_dir(args.data_dir, args.experiment_name)
     cache = Cache(args.experiment_name, args.overwrite)
+    detector = load_detector(args.load_detector)
+    feature_extractor = load_feature_extractor(args.load_feature_extractor)
 
     for seq_dir in sequences:
 
@@ -348,7 +354,7 @@ if __name__ == "__main__":
         output_file = f"{output_dir}/{seq_dir}.txt"
         sequence_dir = f"{args.data_dir}/{seq_dir}"
 
-        run(sequence_dir, args.data_type, args.load_detector, args.load_feature_extractor, 
+        run(sequence_dir, args.data_type, detector, feature_extractor, 
             output_file, args.min_confidence, args.nms_max_overlap, 
             args.min_detection_height, args.max_cosine_distance, args.nn_budget,
             args.display)
