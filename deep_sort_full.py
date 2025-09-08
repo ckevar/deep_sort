@@ -113,7 +113,7 @@ def create_detections(dets, confs, feats):
     return detection_list
 
 
-def unravel_detections_confs(detections, min_height):
+def unwrap_detections_ltwh_confs(detections, min_height):
     confs = detections.boxes.conf.cpu().numpy()
     detections = detections.boxes.xyxy.cpu().numpy()
     detections[:, 2:4] = detections[:, 2:4] - detections[:, 0:2]
@@ -182,7 +182,7 @@ def run(sequence_dir, data_type, detector, feature_extractor,
         start_time = time.time()
 
         detections = detector(frame, verbose=False)[0]
-        detections, confs = unravel_detections_confs(detections, min_detection_height)
+        detections, confs = unwrap_detections_ltwh_confs(detections, min_detection_height)
 
         feats = feature_extractor(frame, detections)
 
@@ -230,6 +230,9 @@ def run(sequence_dir, data_type, detector, feature_extractor,
     # Store results.
 
     store_results(output_file, results, data_type)
+
+    if display:
+        cv2.destroyAllWindows()
 
 def store_results(output_file, results, data_type):
 
