@@ -32,10 +32,10 @@ def load_feature_extractor(feature_extractor_file):
     elif feature_extractor_file.endswith("pth"):
         from tools.generate_torch_detections import create_box_encoder
         if "mot17" in feature_extractor_file: train_ids = 388
-        elif "kitti" in feature_extractor_file: train_ids = 450
+        elif "kitti" in feature_extractor_file: train_ids = 451
         elif "waymo" in feature_extractor_file: train_ids = 20982
         else: raise ValueError(f"Model {feature_extractor_file} not supported, unknow train_ids.\n")
-        return create_box_encoder(feature_extractor_file, train_ids, batch_size=32)
+        return create_box_encoder(feature_extractor_file, train_ids, batch_size=128)
 
     else:
         raise ValueError(f"Mode {feature_extractor_file} not supported.\n")
@@ -103,7 +103,7 @@ def gather_sequence_info(sequence_dir, data_type):
     }
     return seq_info
 
-
+import torch
 def create_detections(dets, confs, feats):
     detection_list = []
 
@@ -114,11 +114,15 @@ def create_detections(dets, confs, feats):
 
 
 def unwrap_detections_ltwh_confs(detections, min_height):
-    confs = detections.boxes.conf.cpu().numpy()
-    detections = detections.boxes.xyxy.cpu().numpy()
-    detections[:, 2:4] = detections[:, 2:4] - detections[:, 0:2]
-    detections = detections[detections[:, 3] > min_height,:]
-    return detections, confs
+    confs = detections.boxes.conf.unsqueeze(1)
+    boxes = detections.boxes.xyxy.clone().detach()
+    boxes[:, 2:4] = boxes[:, 2:4] - boxes[:, :2]
+
+    out = torch.cat([boxes, confs], dim=1)
+    out = out[out[:, 3] > min_height, :]
+    out = out.cpu().numpy()
+
+    return out[:, :4], out[:, 4]
 
 total_et = 0
 total_frame = 0
@@ -171,6 +175,7 @@ def run(sequence_dir, data_type, detector, feature_extractor,
     results = []
     total_et = 0
     total_frame = 0
+    display = True
 
     def frame_callback(vis, frame_idx):
         global total_et
@@ -228,7 +233,6 @@ def run(sequence_dir, data_type, detector, feature_extractor,
     print(f"Time elapsed: {total_et}, FPS: {total_frame/total_et}\n")
 
     # Store results.
-
     store_results(output_file, results, data_type)
 
     if display:
@@ -241,10 +245,9 @@ def store_results(output_file, results, data_type):
     elif "KITTI" == data_type:
         save_format = "%d %d pedestrian 0 0 -10 %.2f %.2f %.2f %.2f -10 -10 -10 -1000 -1000 -1000 -10"
         results = np.array(results)
-        results[:, 4:] += results[:, 2:4]
+        results[:, 4:6] += results[:, 2:4]
     else:
-        print("\n Data type {data_type} not supported.")
-        exit(1)
+        raise ValueError(f"Dataset format --data_type={data_type} not supported.\n")
 
     f = open(output_file, 'w')
     for row in results:
