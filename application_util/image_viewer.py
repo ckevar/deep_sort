@@ -296,7 +296,9 @@ class ImageViewer(object):
         """
         if update_fun is not None:
             self._user_fun = update_fun
-
+        # NOTE on Saving: To save image fastly without understanding the documentation
+        # unable lines with img_name
+        #img_name = 0
         self._terminate, is_paused = False, False
         # print("ImageViewer is paused, press space to start.")
         while not self._terminate:
@@ -310,7 +312,10 @@ class ImageViewer(object):
             remaining_time = max(1, int(self._update_ms - 1e3*(t1-t0)))
             cv2.imshow(
                 self._caption, cv2.resize(self.image, self._window_shape[:2]))
+            #img_file = f"/tmp/{img_name}.jpg"
+            #cv2.imwrite(img_file, self.image)
             key = cv2.waitKey(remaining_time)
+            #img_name += 1
             if key & 255 == 27:  # ESC
                 print("terminating")
                 self._terminate = True

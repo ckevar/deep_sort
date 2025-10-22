@@ -175,7 +175,6 @@ def run(sequence_dir, data_type, detector, feature_extractor,
     results = []
     total_et = 0
     total_frame = 0
-    display = True
 
     def frame_callback(vis, frame_idx):
         global total_et
