@@ -18,36 +18,63 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride):
+    def __init__(self, in_channels, out_channels, stride, is_first=False):
         super(ResidualBlock, self).__init__()
         self.stride = stride
+        self.is_first = is_first
         self.same_shape = (in_channels == out_channels and stride == 1)
+
+        if not is_first:
+            self.pre_bn = nn.BatchNorm2d(in_channels)
+        else:
+            self.pre_bn = None
 
         self.conv1 = nn.Conv2d(in_channels, out_channels, 3, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU(inplace=True)
+        self.elu = nn.ELU(inplace=True)
+        self.dropout = nn.Dropout(p=0.4)
 
-        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=True)
 
         if not self.same_shape:
-            self.downsample = nn.Sequential(
-                nn.Conv2d(in_channels, out_channels, 1, stride=stride, bias=False),
-                nn.BatchNorm2d(out_channels),
-            )
+            self.downsample = nn.Conv2d(in_channels, out_channels, 1, stride=stride, bias=False)
         else:
             self.downsample = None
 
     def forward(self, x):
         identity = x
-        out = self.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
+
+        if not self.is_first:
+            x = self.pre_bn(x)
+            x = self.elu(x)
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.elu(out)
+        out = self.dropout(out)
+
+        out = self.conv2(out)
 
         if self.downsample:
             identity = self.downsample(x)
 
         out += identity
-        return self.relu(out)
+        return self.elu(out)
+
+
+class CosineClassifier(nn.Module):
+    def __init__(self, feat_dim, num_classes):
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty(num_classes, feat_dim))
+        nn.init.xavier_uniform_(self.weight)
+        self.scale = nn.Parameter(torch.tensor(0.0))
+
+    def forward(self, features):
+        weight = F.normalize(self.weight, p=2, dim=1)
+        cosine = torch.matmul(features, weight.t())
+        s = F.softplus(self.scale)
+        logits = s * cosine
+        return logits
 
 
 class MarsSmall128(nn.Module):
@@ -55,12 +82,15 @@ class MarsSmall128(nn.Module):
         super(MarsSmall128, self).__init__()
 
         # Input convs
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1)   # Output: 128x64x32
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1)  # Output: 128x64x32
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=True)   # Output: 128x64x32
+        self.bn1 = nn.BatchNorm2d(32) 
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=True)  # Output: 128x64x32
+        self.bn2 = nn.BatchNorm2d(32)
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)        # Output: 64x32x32
+        self.elu = nn.ELU(inplace=True)
 
         # Residual modules
-        self.res1 = ResidualBlock(32, 32, stride=1)   # 64x32x32
+        self.res1 = ResidualBlock(32, 32, stride=1, is_first=True)   # 64x32x32
         self.res2 = ResidualBlock(32, 32, stride=1)   # 64x32x32
         self.res3 = ResidualBlock(32, 64, stride=2)   # 32x16x64
         self.res4 = ResidualBlock(64, 64, stride=1)   # 32x16x64
@@ -73,11 +103,12 @@ class MarsSmall128(nn.Module):
         self.bn = nn.BatchNorm1d(128)
 
         # Optional classifier head
-        self.classifier = nn.Linear(128, num_classes) if num_classes is not None else None
+        #self.classifier = nn.Linear(128, num_classes) if num_classes is not None else None
+        self.classifier = CosineClassifier(128, num_classes)
 
     def forward(self, x, return_embedding=False):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
+        x = self.elu(self.bn1(self.conv1(x)))
+        x = self.elu(self.bn2(self.conv2(x)))
         x = self.pool(x)
 
         x = self.res1(x)
@@ -96,6 +127,191 @@ class MarsSmall128(nn.Module):
         if self.classifier and not return_embedding:
             return self.classifier(x)
         return x
+
+def map_tf_to_pt(tf_name):
+    """
+    Maps extracted TF constant filename -pytorch parameter name
+    """
+
+    # Skip classifier
+    if "ball" in tf_name:
+        return None
+
+    mapping = {
+        # --- Input convs ---
+        "conv1_1/weights.npy": "conv1.weight",
+        "conv1_1/conv1_1/bn/Const.npy": "conv1_bn.weight",
+        "conv1_1/conv1_1/bn/beta.npy": "conv1_bn.bias",
+        "conv1_1/conv1_1/bn/moving_mean.npy": "conv1_bn.running_mean",
+        "conv1_1/conv1_1/bn/moving_variance.npy": "conv1_bn.running_var",
+
+        "conv1_2/weights.npy": "conv2.weight",
+        "conv1_2/conv1_2/bn/Const.npy": "conv2_bn.weight",
+        "conv1_2/conv1_2/bn/beta.npy": "conv2_bn.bias",
+        "conv1_2/conv1_2/bn/moving_mean.npy": "conv2_bn.running_mean",
+        "conv1_2/conv1_2/bn/moving_variance.npy": "conv2_bn.running_var",
+
+        # --- Example for first residual block (res1) ---
+        "conv2_1/1/weights.npy"                     : "res1.conv1.weight",
+        "conv2_1/1/conv2_1/1/bn/Const.npy"          : "res1.bn1.weight",
+        "conv2_1/1/conv2_1/1/bn/beta.npy"           : "res1.bn1.bias",
+        "conv2_1/1/conv2_1/1/bn/moving_mean.npy"    : "res1.bn1.running_mean",
+        "conv2_1/1/conv2_1/1/bn/moving_variance.npy": "res1.bn1.running_var",
+        "conv2_1/2/weights.npy"                     : "res1.conv2.weight",
+        "conv2_1/2/biases.npy"                      : "res1.conv2.bias",
+
+        # Res2
+        "conv2_3/bn/Const.npy"                      : "res2.pre_bn.weight",
+        "conv2_3/bn/beta.npy"                       : "res2.pre_bn.bias",
+        "conv2_3/bn/moving_mean.npy"                : "res2.pre_bn.running_mean",
+        "conv2_3/bn/moving_variance.npy"            : "res2.pre_bn.running_var",
+        "conv2_3/1/weights.npy"                     : "res2.conv1.weight",
+        "conv2_3/1/conv2_3/1/bn/Const.npy"          : "res2.bn1.weight",
+        "conv2_3/1/conv2_3/1/bn/beta.npy"           : "res2.bn1.bias",
+        "conv2_3/1/conv2_3/1/bn/moving_mean.npy"    : "res2.bn1.running_mean",
+        "conv2_3/1/conv2_3/1/bn/moving_variance.npy": "res2.bn1.running_var",
+        "conv2_3/2/weights.npy"                     : "res2.conv2.weight",
+        "conv2_3/2/biases.npy"                      : "res2.conv2.bias",
+
+        # Res3
+        "conv3_1/bn/Const.npy"                      : "res3.pre_bn.weight",
+        "conv3_1/bn/beta.npy"                       : "res3.pre_bn.bias",
+        "conv3_1/bn/moving_mean.npy"                : "res3.pre_bn.running_mean",
+        "conv3_1/bn/moving_variance.npy"            : "res3.pre_bn.running_var",
+        "conv3_1/1/weights.npy"                     : "res3.conv1.weight",
+        "conv3_1/1/conv3_1/1/bn/Const.npy"          : "res3.bn1.weight",
+        "conv3_1/1/conv3_1/1/bn/beta.npy"           : "res3.bn1.bias",
+        "conv3_1/1/conv3_1/1/bn/moving_mean.npy"    : "res3.bn1.running_mean",
+        "conv3_1/1/conv3_1/1/bn/moving_variance.npy": "res3.bn1.running_var",
+        "conv3_1/2/weights.npy"                     : "res3.conv2.weight",
+        "conv3_1/2/biases.npy"                      : "res3.conv2.bias",
+        "conv3_1/projection/weights.npy"            : "res3.downsample.weight",
+
+        # Res4
+        "conv3_3/bn/Const.npy"                      : "res4.pre_bn.weight",
+        "conv3_3/bn/beta.npy"                       : "res4.pre_bn.bias",
+        "conv3_3/bn/moving_mean.npy"                : "res4.pre_bn.running_mean",
+        "conv3_3/bn/moving_variance.npy"            : "res4.pre_bn.running_var",
+        "conv3_3/1/weights.npy"                     : "res4.conv1.weight",
+        "conv3_3/1/conv3_3/1/bn/Const.npy"          : "res4.bn1.weight",
+        "conv3_3/1/conv3_3/1/bn/beta.npy"           : "res4.bn1.bias",
+        "conv3_3/1/conv3_3/1/bn/moving_mean.npy"    : "res4.bn1.running_mean",
+        "conv3_3/1/conv3_3/1/bn/moving_variance.npy": "res4.bn1.running_var",
+        "conv3_3/2/weights.npy"                     : "res4.conv2.weight",
+        "conv3_3/2/biases.npy"                      : "res4.conv2.bias",
+        "conv3_3/projection/weights.npy"            : "res4.downsample.weight",
+
+        # Res5
+        "conv4_1/bn/Const.npy"                      : "res5.pre_bn.weight",
+        "conv4_1/bn/beta.npy"                       : "res5.pre_bn.bias",
+        "conv4_1/bn/moving_mean.npy"                : "res5.pre_bn.running_mean",
+        "conv4_1/bn/moving_variance.npy"            : "res5.pre_bn.running_var",
+        "conv4_1/1/weights.npy"                     : "res5.conv1.weight",
+        "conv4_1/1/conv4_1/1/bn/Const.npy"          : "res5.bn1.weight",
+        "conv4_1/1/conv4_1/1/bn/beta.npy"           : "res5.bn1.bias",
+        "conv4_1/1/conv4_1/1/bn/moving_mean.npy"    : "res5.bn1.running_mean",
+        "conv4_1/1/conv4_1/1/bn/moving_variance.npy": "res5.bn1.running_var",
+        "conv4_1/2/weights.npy"                     : "res5.conv2.weight",
+        "conv4_1/2/biases.npy"                      : "res5.conv2.bias",
+        "conv4_1/projection/weights.npy"            : "res5.downsample.weight",
+
+
+        # Res6
+        "conv4_3/bn/Const.npy"                      : "res6.pre_bn.weight",
+        "conv4_3/bn/beta.npy"                       : "res6.pre_bn.bias",
+        "conv4_3/bn/moving_mean.npy"                : "res6.pre_bn.running_mean",
+        "conv4_3/bn/moving_variance.npy"            : "res6.pre_bn.running_var",
+        "conv4_3/1/weights.npy"                     : "res6.conv1.weight",
+        "conv4_3/1/conv4_3/1/bn/Const.npy"          : "res6.bn1.weight",
+        "conv4_3/1/conv4_3/1/bn/beta.npy"           : "res6.bn1.bias",
+        "conv4_3/1/conv4_3/1/bn/moving_mean.npy"    : "res6.bn1.running_mean",
+        "conv4_3/1/conv4_3/1/bn/moving_variance.npy": "res6.bn1.running_var",
+        "conv4_3/2/weights.npy"                     : "res6.conv2.weight",
+        "conv4_3/2/biases.npy"                      : "res6.conv2.bias",
+
+
+        # --- Final FC + BN ---
+        "fc1/weights.npy": "fc.weight",
+        "fc1/biases.npy": "fc.bias",
+        "fc1/fc1/bn/Const.npy": "bn.weight",
+        "fc1/fc1/bn/beta.npy": "bn.bias",
+        "fc1/fc1/bn/moving_mean.npy": "bn.running_mean",
+        "fc1/fc1/bn/moving_variance.npy": "bn.running_var",
+
+        "fc1/fc1/bn/Reshape/shape.npy": None,
+        "map/Const.npy" : None,
+        "map/while/add/y.npy" : None,
+        "map/while/strided_slice/stack_1.npy" : None,
+        "map/while/strided_slice/stack_2.npy" : None,
+        "map/while/strided_slice/stack.npy" : None,
+        "map/TensorArrayStack/range/delta.npy": None,
+        "map/TensorArrayStack/range/start.npy": None,
+        "map/TensorArrayUnstack/range/delta.npy": None,
+        "map/TensorArrayUnstack/range/start.npy": None,
+        "map/TensorArrayUnstack/strided_slice/stack_2.npy": None,
+        "map/TensorArrayUnstack/strided_slice/stack_1.npy": None,
+        "map/TensorArrayUnstack/strided_slice/stack.npy": None,
+        "map/strided_slice/stack_2.npy" : None,
+        "map/strided_slice/stack_1.npy" : None,
+        "map/strided_slice/stack.npy" : None,
+        "Sum/reduction_indices.npy": None,
+        "Flatten/flatten/Reshape/shape/1.npy" : None,
+        "Flatten/flatten/strided_slice/stack_2.npy" : None,
+        "Flatten/flatten/strided_slice/stack_1.npy" : None,
+        "Flatten/flatten/strided_slice/stack.npy" : None,
+        "Const.npy" : None,
+    }
+
+    return mapping[tf_name]
+
+def load_tf_constangs_into_mars(tf_constants_dir, model):
+    """
+    Recursively load TF constants from nested directories into PyTorch model.
+
+    tf_constants_dir: root folder containing TF .npy constants (nested)
+    model: PyTorch model
+    map_tf_to_pt: function(tf_name:str) -> pt_name:str or None
+    """
+    state_dict = model.state_dict()
+    loaded_count = 0
+
+    for root, dirs, files in os.walk(tf_constants_dir):
+        print(root, dirs)
+        for fname in files:
+            print("   ", fname)
+            if not fname.endswith(".npy"):
+                continue
+
+            abs_path = os.path.join(root, fname)
+            # normalize path to TF variable name (like extractor did)
+            tf_name = os.path.relpath(abs_path, tf_constants_dir)
+            #tf_name = tf_name.replace(os.sep, "_").replace("/", "_").replace(":", "_").replace(".npy", "")
+
+            pt_name = map_tf_to_pt(tf_name)
+            if pt_name is None:
+                continue
+            if pt_name not in state_dict:
+                continue
+
+            arr = np.load(abs_path)
+            # permute conv/dense if needed
+            if arr.ndim == 4:  # conv
+                arr = arr.transpose(3, 2, 0, 1).copy()
+            elif arr.ndim == 2:  # dense
+                arr = arr.T.copy()
+
+            tensor = torch.from_numpy(arr)
+            if tensor.shape != state_dict[pt_name].shape:
+                print(f"[SKIP] Shape mismatch {tf_name} -> {pt_name} {tensor.shape} vs {state_dict[pt_name].shape}")
+                continue
+
+            state_dict[pt_name].copy_(tensor)
+            loaded_count += 1
+            print(f"[LOADED] {tf_name} -> {pt_name} {tensor.shape}")
+
+    model.load_state_dict(state_dict)
+    print(f"Done loading TF weights. Total loaded: {loaded_count}")
+
 
 def freeze_model(model, phase):
   if phase >= 2: # Freeze just shallow layers
@@ -623,20 +839,15 @@ def init_memory_bank(ft_sz, criterion, cfg):
    return mem_bank
 
 def fix_seed(seed):
-    # 1️⃣ Python random module
     random.seed(seed)
 
-    # 2️⃣ Numpy random
     np.random.seed(seed)
 
-    # 3️⃣ PyTorch CPU
     torch.manual_seed(seed)
     
-    # 4️⃣ PyTorch GPU
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)  # if you use multiple GPUs
     
-    # 5️⃣ CUDNN settings Debug-only
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
@@ -650,6 +861,11 @@ def init_seed(cfg):
         seed = random.randint(0, 2**32 - 1)
         print("seed:", seed)
     fix_seed(seed)
+
+def save_as_pytorch(model, path="marsPytorch.pth"):
+    model_cpu = model.to("cpu")
+    torch.save({"model_state_dict": model_cpu.state_dict()}, path)
+    print(f"Saved pytorch checkpoint to {path}")
 
 def train(config_file, mode="train"):
     config = load_config(config_file)
@@ -680,6 +896,7 @@ def train(config_file, mode="train"):
 
     # Init training hyper parameters
     model = MarsSmall128(num_classes=num_classes).cuda()
+
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scaler = GradScaler(torch.device('cuda'))   # Automatic Mixed Precision
@@ -802,6 +1019,12 @@ def user_config():
 if "__main__" == __name__:
     
     args = user_config()
-
     train(args.cfg, mode=args.mode)
+
+    """
+    # This is just to send the parameters from tensorflow v1 to pytorch.
+    model = MarsSmall128(num_classes=1000).cuda()
+    load_tf_constangs_into_mars("/home/chris/Documents/Code/mot/experiments/trackers/deep_sort/tools/tf_constants", model)
+    save_as_pytorch(model)
+    """
 
