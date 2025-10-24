@@ -279,6 +279,7 @@ def load_tf_constangs_into_mars(tf_constants_dir, model):
             if pt_name is None:
                 continue
             if pt_name not in state_dict:
+                print(f"[-----------SKIP-0] {pt_name} not in state_dict")
                 continue
 
             arr = np.load(abs_path)
@@ -290,7 +291,7 @@ def load_tf_constangs_into_mars(tf_constants_dir, model):
 
             tensor = torch.from_numpy(arr)
             if tensor.shape != state_dict[pt_name].shape:
-                print(f"[SKIP] Shape mismatch {tf_name} -> {pt_name} {tensor.shape} vs {state_dict[pt_name].shape}")
+                print(f"[----------------SKIP-1] Shape mismatch {tf_name} -> {pt_name} {tensor.shape} vs {state_dict[pt_name].shape}")
                 continue
 
             state_dict[pt_name].copy_(tensor)
@@ -656,7 +657,7 @@ def evaluate_mAP_CMCD(config, model, feat_dims):
         transforms.Resize(tuple(config['resize'])),
         transforms.ToTensor(),
         transforms.Lambda(lambda x: x * 255.0),
-        transforms.Lambda(lambda x: x[[2, 1, 0]: ...])
+        transforms.Lambda(lambda x: x[[2, 1, 0], ...])
         #transforms.Normalize([0.5]*3, [0.5]*3)
     ])
 
@@ -1066,6 +1067,8 @@ def user_config():
     return parser.parse_args()
 
 if "__main__" == __name__:
+
+    """
     
     args = user_config()
     train(args.cfg, mode=args.mode, experiment_name=args.experiment_name)
@@ -1075,5 +1078,4 @@ if "__main__" == __name__:
     model = MarsSmall128(num_classes=1000).cuda()
     load_tf_constangs_into_mars("/home/chris/Documents/Code/mot/experiments/trackers/deep_sort/tools/tf_constants", model)
     save_as_pytorch(model)
-    """
 
