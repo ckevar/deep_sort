@@ -1068,7 +1068,6 @@ def user_config():
 
 if "__main__" == __name__:
 
-    """
     
     args = user_config()
     train(args.cfg, mode=args.mode, experiment_name=args.experiment_name)
@@ -1078,4 +1077,4 @@ if "__main__" == __name__:
     model = MarsSmall128(num_classes=1000).cuda()
     load_tf_constangs_into_mars("/home/chris/Documents/Code/mot/experiments/trackers/deep_sort/tools/tf_constants", model)
     save_as_pytorch(model)
-
+    """
