@@ -912,6 +912,7 @@ def save_as_pytorch(model, path="marsPytorch.pth"):
 
 def train(config_file, mode="train", experiment_name="default"):
     config = load_config(config_file)
+    init_seed(config)
     create_logs(config, experiment_name)
 
     ending_epoch = config['training']['epochs']
