@@ -489,7 +489,7 @@ def lr_config(cfg):
         lr_schedule_at = None
         cfg['training']['lr_schedule_at'] = None
 
-    lr = float(config['training']['lr'])
+    lr = float(cfg['training']['lr'])
 
     return lr, lr_scheduling, lr_schedule_at
 
