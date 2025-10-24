@@ -71,9 +71,9 @@ class MarsSmall128(nn.Module):
 
         # Input convs
         self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=True)   # Output: 128x64x32
-        self.bn1 = nn.BatchNorm2d(32) 
+        self.conv1_bn = nn.BatchNorm2d(32) 
         self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=True)  # Output: 128x64x32
-        self.bn2 = nn.BatchNorm2d(32)
+        self.conv2_bn = nn.BatchNorm2d(32)
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)        # Output: 64x32x32
         self.elu = nn.ELU(inplace=True)
 
@@ -87,7 +87,7 @@ class MarsSmall128(nn.Module):
 
         # Final layers
         self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(128, 128)
+        self.fc = nn.Linear(16384, 128)
         self.bn = nn.BatchNorm1d(128)
 
         # Optional classifier head
@@ -95,8 +95,9 @@ class MarsSmall128(nn.Module):
         self.classifier = CosineClassifier(128, num_classes)
 
     def forward(self, x, return_embedding=False):
-        x = self.elu(self.bn1(self.conv1(x)))
-        x = self.elu(self.bn2(self.conv2(x)))
+
+        x = self.elu(self.conv1_bn(self.conv1(x)))
+        x = self.elu(self.conv2_bn(self.conv2(x)))
         x = self.pool(x)
 
         x = self.res1(x)
@@ -106,7 +107,7 @@ class MarsSmall128(nn.Module):
         x = self.res5(x)
         x = self.res6(x)
 
-        x = self.global_avg_pool(x)
+        #x = self.global_avg_pool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
         x = self.bn(x)
@@ -264,9 +265,9 @@ def load_tf_constangs_into_mars(tf_constants_dir, model):
     loaded_count = 0
 
     for root, dirs, files in os.walk(tf_constants_dir):
-        print(root, dirs)
+        #print(root, dirs)
         for fname in files:
-            print("   ", fname)
+            print("\n   ", fname)
             if not fname.endswith(".npy"):
                 continue
 
@@ -296,7 +297,7 @@ def load_tf_constangs_into_mars(tf_constants_dir, model):
 
             state_dict[pt_name].copy_(tensor)
             loaded_count += 1
-            print(f"[LOADED] {tf_name} -> {pt_name} {tensor.shape}")
+            #print(f"[LOADED] {tf_name} -> {pt_name} {tensor.shape}")
 
     model.load_state_dict(state_dict)
     print(f"Done loading TF weights. Total loaded: {loaded_count}")
@@ -1068,13 +1069,12 @@ def user_config():
 
 if "__main__" == __name__:
 
-    
     args = user_config()
     train(args.cfg, mode=args.mode, experiment_name=args.experiment_name)
 
     """
     # This is just to send the parameters from tensorflow v1 to pytorch.
-    model = MarsSmall128(num_classes=1000).cuda()
+    model = MarsSmall128(num_classes=1).cuda()
     load_tf_constangs_into_mars("/home/chris/Documents/Code/mot/experiments/trackers/deep_sort/tools/tf_constants", model)
     save_as_pytorch(model)
     """
