@@ -655,7 +655,8 @@ def evaluate_mAP_CMCD(config, model, feat_dims):
     transform_qg = transforms.Compose([
         transforms.Resize(tuple(config['resize'])),
         transforms.ToTensor(),
-        transforms.Normalize([0.5]*3, [0.5]*3)
+        transforms.Lambda(lambda x: x * 255.0),
+        #transforms.Normalize([0.5]*3, [0.5]*3)
     ])
 
 
@@ -727,7 +728,8 @@ def init_dataset(config):
         transforms.RandomResizedCrop(tuple(config['resize'])),  # random crop & resize to your input size
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
         transforms.ToTensor(),
-        transforms.Normalize([0.5]*3, [0.5]*3)
+        transforms.Lambda(lambda x: x * 255.0),
+        #transforms.Normalize([0.5]*3, [0.5]*3)
     ])
 
     root_dir = config["root_dir"]
