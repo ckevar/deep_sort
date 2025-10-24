@@ -489,8 +489,9 @@ def lr_config(cfg):
         lr_schedule_at = None
         cfg['training']['lr_schedule_at'] = None
 
+    lr = float(config['training']['lr'])
 
-    return lr_scheduling, lr_schedule_at
+    return lr, lr_scheduling, lr_schedule_at
 
 """# IV· Training
 
@@ -922,23 +923,21 @@ def train(config_file, mode="train", experiment_name="default"):
         use_memory_bank = False
         config['training']["memory_bank"] = False
 
-    print("use_memory_bank", use_memory_bank)
-
     # Learning Rate related
-    lr = float(config['training']['lr'])
-    lr_scheduling, lr_schedule_at = lr_config(config)
-
-    print(f"LR Scheduled @ {lr_schedule_at}")
+    lr, lr_scheduling, lr_schedule_at = lr_config(config)
+    if lr_schedule_at:
+        print(f"LR Scheduled @ {lr_schedule_at}")
 
     # Filenames Model and Metrics
     mk_filenames(config)
     print(f"Metrics @ {config['metrics_filename']}, Model @ {config['model_filename']}")
-    save_config(config)
 
     # Init Dataset
     num_classes, train_loader = init_dataset(config)
     print(f"Number of classes: {num_classes} | Important upon deployment.")
-    
+
+    # Save new config yaml
+    save_config(config)
 
     # Init training hyper parameters
     model = MarsSmall128(num_classes=num_classes).cuda()
