@@ -888,6 +888,7 @@ def fix_seed(seed, determinism_level):
 def init_seed(cfg):
     try:
         seed = cfg['training']['seed']
+        print("seed", seed)
         if seed < 0:
             seed = random.randint(0, 2**32 - 1) 
             print("seed:", seed)
