@@ -457,6 +457,17 @@ class ReIDListDataset(Dataset):
 """# III· Load  Configurations"""
 
 import yaml
+
+def create_logs(cfg, experiment_name):
+    log_dir = cfg["log_dir"]
+    experiment_path = f"{log_dir}/{experiment_name}"
+
+    os.makedirs(log_dir, exist_ok=True)
+    os.makedirs(experiment_path, exist_ok=True)
+
+    cfg["experiment_name"] = experiment_name
+    cfg["experiment_log_dir"] = experiment_path
+
 def load_config(config_filename):
 
     with open(config_filename, 'r') as f:
@@ -469,6 +480,29 @@ def load_config(config_filename):
                          config['patched_per_id'])
 
     return config
+
+def save_config(cfg):
+    cfg_filename = f"{cfg['experiment_log_dir']}/config.yaml"
+    yaml_str = yaml.safe_dump(cfg)
+    with open(cfg_filename, "w") as f:
+        f.write(yaml_str)
+        
+
+def lr_config(cfg):
+    try:
+        lr_scheduling = cfg['training']['lr_scheduling']
+    except:
+        lr_scheduling = False
+        cfg['training']['lr_scheduling'] = False
+
+    try:
+        lr_schedule_at = cfg['training']['lr_schedule_at']
+    except:
+        lr_schedule_at = None
+        cfg['training']['lr_schedule_at'] = None
+
+
+    return lr_scheduling, lr_schedule_at
 
 """# IV· Training
 
@@ -687,8 +721,9 @@ import random
 from collections import defaultdict
 
 def mk_filenames(config):
-    reid_dataset = config["root_dir"].split('/')[-1]
-    experiment_name = f"metrics/{reid_dataset}_%s_lr{config['training']['lr']}_p{config['training']['p']}_k{config['training']['k']}.%s"
+
+    log_dir = config["experiment_log_dir"]
+    experiment_name = f"{log_dir}/%s_lr{config['training']['lr']}_p{config['training']['p']}_k{config['training']['k']}.%s"
 
     metrics_filename = experiment_name % ("results", "dat")
     model_filename = experiment_name % ("model", "pth")
@@ -696,9 +731,9 @@ def mk_filenames(config):
     config['metrics_filename'] = metrics_filename
     config['model_filename'] = model_filename
 
-    #return metrics_filename, model_filename
 
 def init_dataset(config):
+
     transform = transforms.Compose([
         transforms.RandomResizedCrop(tuple(config['resize'])),  # random crop & resize to your input size
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
@@ -714,17 +749,21 @@ def init_dataset(config):
         transform=transform
     )
 
-    training_batch_size=config['training']['p'] * config['training']['k']
+    train_batch_sz = config['training']['p'] * config['training']['k']
     pk_sampler = PKSampler(train_dataset,
                            P=config['training']['p'],
                            K=config['training']['k'])
 
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=train_batch_sz,
+        sampler=pk_sampler,
+        num_workers=2
+    )
 
-    train_loader = DataLoader(train_dataset,
-                          batch_size=training_batch_size,
-                          sampler=pk_sampler,
-                          num_workers=2)
-    return len(train_dataset.classes), train_loader
+    config["num_classes"] = len(train_dataset.classes)
+
+    return config["num_classes"], train_loader
 
 def init_model_to_train(config, mode, model, optimizer, scaler):
     if "resume" == mode:
@@ -838,18 +877,25 @@ def init_memory_bank(ft_sz, criterion, cfg):
                          amp=True)
    return mem_bank
 
-def fix_seed(seed):
-    random.seed(seed)
+def fix_seed(seed, determinism_level):
+    """
+    seed: seed to place in every random module
+    determinism_level: there are three levels of determinsm:
+    - 0: no determisn at all, everything is random, so it means seed will be ignored.
+    - 1: only placing the seed
+    - 2: placing seed plus making torch deterministic
+    """
 
-    np.random.seed(seed)
+    if determinism_level >= 1:
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # if you use multiple GPUs
 
-    torch.manual_seed(seed)
-    
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # if you use multiple GPUs
-    
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    if 2 == determinism_level:
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 def init_seed(cfg):
     try:
@@ -859,40 +905,50 @@ def init_seed(cfg):
             print("seed:", seed)
     except:
         seed = random.randint(0, 2**32 - 1)
+        cfg["training"]["seed"] = seed
         print("seed:", seed)
-    fix_seed(seed)
+
+    try:
+        determinism_level = cfg['training']['determinism_level']
+    except:
+        determinism_level = 0
+        cfg["training"]["determinism_level"] = determinism_level
+
+    fix_seed(seed, determinism_level)
 
 def save_as_pytorch(model, path="marsPytorch.pth"):
     model_cpu = model.to("cpu")
     torch.save({"model_state_dict": model_cpu.state_dict()}, path)
     print(f"Saved pytorch checkpoint to {path}")
 
-def train(config_file, mode="train"):
+def train(config_file, mode="train", experiment_name="default"):
     config = load_config(config_file)
+    create_logs(config, experiment_name)
 
     ending_epoch = config['training']['epochs']
     try:
         use_memory_bank = config['training']['memory_bank']
     except:
         use_memory_bank = False
+        config['training']["memory_bank"] = False
 
     print("use_memory_bank", use_memory_bank)
 
     # Learning Rate related
     lr = float(config['training']['lr'])
-    lr_scheduling = config['training']['lr_scheduling'] == "True"
-    lr_schedule_at = config['training']['lr_schedule_at'] if lr_scheduling else None
+    lr_scheduling, lr_schedule_at = lr_config(config)
+
     print(f"LR Scheduled @ {lr_schedule_at}")
 
     # Filenames Model and Metrics
     mk_filenames(config)
     print(f"Metrics @ {config['metrics_filename']}, Model @ {config['model_filename']}")
-
-    init_seed(config)
+    save_config(config)
 
     # Init Dataset
     num_classes, train_loader = init_dataset(config)
     print(f"Number of classes: {num_classes} | Important upon deployment.")
+    
 
     # Init training hyper parameters
     model = MarsSmall128(num_classes=num_classes).cuda()
@@ -905,7 +961,7 @@ def train(config_file, mode="train"):
 
     if use_memory_bank:
         memory_bank = init_memory_bank(128, criterion, config)
-       # Training the model
+    # Training the model
     for epoch in range(start_epoch, ending_epoch):
         model.train()
         running_loss = 0.0
@@ -1009,17 +1065,17 @@ def user_config():
     parser.add_argument("--cfg",
                        help="configuration file",
                        default=None)
-    parser.add_argument("--model",
-                        help="Where the model is.",
+    parser.add_argument("--experiment_name",
+                        help="This will create a directory where results and models will be saved.",
                         type=str,
-                        default=None)
+                        default="default")
 
     return parser.parse_args()
 
 if "__main__" == __name__:
     
     args = user_config()
-    train(args.cfg, mode=args.mode)
+    train(args.cfg, mode=args.mode, experiment_name=args.experiment_name)
 
     """
     # This is just to send the parameters from tensorflow v1 to pytorch.
