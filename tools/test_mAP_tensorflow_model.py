@@ -6,78 +6,7 @@ import torch
 from torchvision import transforms
 from PIL import Image
 import numpy as np
-
-def load_IDoI(filename):
-    fd = open(filename, 'r')
-
-    idoi = {}
-
-    for line in fd:
-        line = line.split(' ')[0]
-        line = line.split('-')
-        _id = int(line[1])
-        seq = int(line[0])
-
-        if not(seq in idoi.keys()):
-            idoi[seq] = []
-
-        idoi[seq].append(_id)
-    
-    return idoi
-
-def generate_detections_IDoI(enconder, args):
-    """
-    Unlike the python script to generate features, this only generate features of specific IDs
-    """
-    
-    try:
-        os.makedirs(args.output_dir)
-    except OSError as exception:
-        if exception.errno == errno.EEXIST and os.path.isdir(args.output_dir):
-            pass
-        else:
-            raise ValueError(
-                f"Failed to creat output directory '{args.output_dir}'")
-
-    idoi = load_IDoI(args.idoi_file)
-
-    for sequence in os.listdir(args.mot_dir):
-        print("Processing %s" % sequence)
-        sequence_dir = os.path.join(mot_dir, sequence)
-        print(sequence_dir)
-        image_dir = os.path.join(sequence_dir, "img1")
-        image_filename = {
-                int(os.path.splitext(f)[0]): os.path.join(image_dir, f)
-                for f in os.listdir(image_dir)}
-
-        # Our intend is to compute the ground truth mAP, to evaluated the 
-        # feature extractor's performance.
-        detection_file = os.path.join(detection_dir, sequence, "gt/gt.txt")
-        detections_in = np.loadtxt(detection_file, delimiter=',')
-        detections_out = []
-
-        sequence_int = int(sequence)
-        sequence_idoi = np.array(idoi[sequence_int])
-        id_indices = detections_in[:, 1].astype(int)
-
-        frame_indices = detections_in[:, 0].astype(int)
-        min_frame_idx = frame_indices.astype(int).min()
-        max_frame_idx = frame_indices.astype(int).max()
-
-        for frame_idx in range(min_frame_idx, max_frame_idx + 1):
-            print(f"Frame {frame_idx:05d}/{max_frame_idx:05d}")
-            mask = frame_indices == frame_idx
-            rows = detections_in[mask]
-
-            mask = sequence_idoi in id_indices
-
-            if frame_idx not in image_filename:
-                print(f"WARNING could not find image for frame {frame_idx}")
-                continue
-            bgr_image = cv2.imread(
-                    image_filenames[frame_idx], cv2.IMREAD_COLOR)
-            features = encoder(bgr_image, rows[:, 2:6].copy())
-            detections_out += [np.r_[(row, features)] for row, feature in zip(rows, features)]
+from freeze_torch_model import load_torchWRN_model, MarsSmall128
 
 class ReIDListDataset(Dataset):
     def __init__(self, root_dir, list_path, transform=None, relabel=True):
@@ -129,18 +58,30 @@ class ReIDListDataset(Dataset):
 
 class ToNumpyUint8:
     def __call__(self, img):
-        arr = np.array(img, dtype=np.uint8)
+        #arr = np.array(img, dtype=np.uint8)
+        arr = np.array(img)
         arr = arr[:, :, ::-1].copy() # from RGB to BGR
         return arr
 
 def load_dataset(cfg, image_shape):
     path = cfg.dataset
     batch_size = 512
-    transform_qg = transforms.Compose([
-        transforms.Resize(image_shape),
-        ToNumpyUint8(),
-        #transforms.ToTensor(),
+
+    model_file =  cfg.model
+
+    if model_file.endswith(".pb"):
+        transform_qg = transforms.Compose([
+            transforms.Resize(image_shape),
+            ToNumpyUint8(),
         ])
+    elif model_file.endswith(".pth"):
+        transform_qg = transforms.Compose([
+            transforms.Resize(image_shape),
+            transforms.ToTensor(),
+            transforms.Lambda(lambda x:x*255),
+            #transforms.Lambda(lambda x:x[[1, 2, 0], ...]) # RGB -> BGR
+        ])
+
 
     gallery_dataset = ReIDListDataset(path,
                                       f"{path}/gallery.txt",
@@ -158,20 +99,28 @@ def load_dataset(cfg, image_shape):
 
 def extract_features(model, loader, feat_dim, batch_sz):
     n_samples = len(loader.dataset)
+    camids = None
+    ptr = 0
+    model_in_pytorch = hasattr(model, "to")
 
     # Preallocated
     feats = torch.zeros((n_samples, feat_dim))
     labels = torch.zeros(n_samples, dtype=torch.long)
 
-    camids = None
-
-    ptr = 0
     for imgs, lbls, cams in loader:
-        #imgs = torch.transpose(imgs,)
-        batch_feats = model(imgs, batch_sz)
+        if model_in_pytorch:
+            imgs = imgs.to("cuda")
+            batch_feats = model(imgs, return_embedding=True).cpu()
+        else:
+            batch_feats = model(imgs, batch_sz)
+            batch_feats = torch.from_numpy(batch_feats)
+
         b = batch_feats.shape[0]
-        feats[ptr:ptr+b] = torch.from_numpy(batch_feats).to("cuda")
-        labels[ptr:ptr+b] = lbls.to("cuda")
+
+        feats[ptr:ptr+b] = batch_feats
+        labels[ptr:ptr+b] = lbls
+
+        del imgs
 
         ptr += b
 
@@ -243,16 +192,34 @@ def compute_cmc_map_in_gpu(query_feats,
 
     return cmc, mAP
 
+import random
+
+def load_model(cfg):
+    model_filename = cfg.model
+
+    if model_filename.endswith(".pb"):
+        model = ImageEncoder(model_filename)
+        return model, model.image_shape
+    
+    elif model_filename.endswith(".pth"):
+        num_classes = int(cfg.num_classes)
+        model = MarsSmall128(num_classes=num_classes)
+        load_torchWRN_model(model_filename, model)
+        torch.set_grad_enabled(False)
+        model.to("cuda")
+        model.eval()
+        return model, (128, 64)
+
 def compute_metrics(cfg):
-    model = ImageEncoder(args.model)
-    image_shape = model.image_shape
+    
+    model, image_shape = load_model(cfg)
     query, gallery, bsz = load_dataset(cfg, image_shape[:2])
 
     feats_dim = 128
 
     Q_feats, Q_ids, Q_cams = extract_features(model, query, feats_dim, bsz)
     G_feats, G_ids, G_cams = extract_features(model, gallery, feats_dim, bsz)
-
+    
     return compute_cmc_map_in_gpu(
             Q_feats, Q_ids,
             G_feats, G_ids,
@@ -269,6 +236,10 @@ def parse_args():
     parser.add_argument("--dataset",
                         help="paths where the query id and gallery ids are listed",
                         required=True)
+
+    parser.add_argument("--num_classes",
+                        help="Number of classes, optional, only for the torch version.",
+                        default=1)
 
     return parser.parse_args()
 

@@ -5,49 +5,91 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+class Conv2Same(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, bias=True):
+        super().__init__()
+        self.conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size=kernel_size,
+            stride=stride, padding=0, bias=bias
+            )
+        self.kernel_size = kernel_size
+        self.stride = stride
+        
+    def forward(self, x):
+        H, W = x.shape[2], x.shape[3]
+        stride = self.stride
+        K = self.kernel_size
+
+        # Compute SAME padding
+        out_h = (H + stride - 1) // stride
+        out_w = (W + stride - 1) // stride
+
+        pad_h = max(0, (out_h - 1) * stride + K - H)
+        pad_w = max(0, (out_w - 1) * stride + K - W)
+
+        pad_top = pad_h // 2
+        pad_bottom = pad_h - pad_top
+
+        pad_left = pad_w // 2
+        pad_right = pad_w - pad_left 
+
+        x = F.pad(x, (pad_left, pad_right, pad_top, pad_bottom))
+        return self.conv(x)
+
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride, is_first=False):
         super(ResidualBlock, self).__init__()
-        self.stride = stride
-        self.is_first = is_first
-        self.same_shape = (in_channels == out_channels and stride == 1)
+        same_shape = (in_channels == out_channels and stride == 1)
 
+        self.pre_bn = None
         if not is_first:
-            self.pre_bn = nn.BatchNorm2d(in_channels)
-        else:
-            self.pre_bn = None
+            self.pre_bn = nn.BatchNorm2d(in_channels, eps=1e-3, momentum=0.999)
 
-        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, stride=stride, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(out_channels)
+        #self.conv1 = nn.Conv2d(in_channels, out_channels, 3, stride=stride, padding=1, bias=False)
+        self.conv1 = Conv2Same(in_channels, 
+                               out_channels, 
+                               kernel_size=3, 
+                               stride=stride,
+                               bias=False)
+
+        self.bn1 = nn.BatchNorm2d(out_channels, eps=1e-3, momentum=0.999)
         self.elu = nn.ELU(inplace=True)
         self.dropout = nn.Dropout(p=0.4)
 
         self.conv2 = nn.Conv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=True)
 
-        if not self.same_shape:
+        self.downsample = None
+        if not same_shape:
             self.downsample = nn.Conv2d(in_channels, out_channels, 1, stride=stride, bias=False)
-        else:
-            self.downsample = None
 
-    def forward(self, x):
-        identity = x
+    def forward(self, _in):
+        x = _in
 
-        if not self.is_first:
+        if self.pre_bn:
             x = self.pre_bn(x)
             x = self.elu(x)
 
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.elu(out)
-        out = self.dropout(out)
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.elu(x)
 
-        out = self.conv2(out)
+        """
+        if self.downsample:
+            print(f"xout.shape {x.shape}") 
+            print(f"{x[0,0,0,0]}")
+            print(f"{x[0,1,0,0]}")
+            print(f"{x[0,2,0,0]}")
+        """
+
+        x = self.dropout(x)
+
+        x = self.conv2(x)
 
         if self.downsample:
-            identity = self.downsample(x)
-
-        out += identity
-        return self.elu(out)
+            _in = self.downsample(_in)
+        
+        x += _in
+        return x
 
 
 class CosineClassifier(nn.Module):
@@ -71,10 +113,12 @@ class MarsSmall128(nn.Module):
 
         # Input convs
         self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=True)   # Output: 128x64x32
-        self.conv1_bn = nn.BatchNorm2d(32) 
+        self.conv1_bn = nn.BatchNorm2d(32, eps=1e-3, momentum=0.999) 
         self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=True)  # Output: 128x64x32
-        self.conv2_bn = nn.BatchNorm2d(32)
-        self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)        # Output: 64x32x32
+        self.conv2_bn = nn.BatchNorm2d(32, eps=1e-3, momentum=0.999)
+
+        self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=0)        # Output: 64x32x32
+        
         self.elu = nn.ELU(inplace=True)
 
         # Residual modules
@@ -86,7 +130,8 @@ class MarsSmall128(nn.Module):
         self.res6 = ResidualBlock(128, 128, stride=1) # 16x8x128
 
         # Final layers
-        self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.dropout = nn.Dropout(p=0.4)
+        #self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(16384, 128)
         self.bn = nn.BatchNorm1d(128)
 
@@ -95,7 +140,6 @@ class MarsSmall128(nn.Module):
         self.classifier = CosineClassifier(128, num_classes)
 
     def forward(self, x, return_embedding=False):
-
         x = self.elu(self.conv1_bn(self.conv1(x)))
         x = self.elu(self.conv2_bn(self.conv2(x)))
         x = self.pool(x)
@@ -107,10 +151,22 @@ class MarsSmall128(nn.Module):
         x = self.res5(x)
         x = self.res6(x)
 
-        #x = self.global_avg_pool(x)
-        x = torch.flatten(x, 1)
+            #x = self.global_avg_pool(x)
+        x = x.permute(0, 2, 3, 1).contiguous().view(x.size(0), -1)
+        #x = torch.flatten(x, )
+        """
+        print(f"xout.shape {x.shape}") 
+        print(f"{x[0,0]}")
+        print(f"{x[0,1]}")
+        print(f"{x[0,2]}")
+        exit(1)
+        """
+
+        x = self.dropout(x)
         x = self.fc(x)
         x = self.bn(x)
+        x = self.elu(x)
+
         x = F.normalize(x, p=2, dim=1)
 
         if self.classifier and not return_embedding:
@@ -140,8 +196,8 @@ def map_tf_to_pt(tf_name):
         "conv1_2/conv1_2/bn/moving_mean.npy": "conv2_bn.running_mean",
         "conv1_2/conv1_2/bn/moving_variance.npy": "conv2_bn.running_var",
 
-        # --- Example for first residual block (res1) ---
-        "conv2_1/1/weights.npy"                     : "res1.conv1.weight",
+        # Res1
+        "conv2_1/1/weights.npy"                     : "res1.conv1.conv.weight",
         "conv2_1/1/conv2_1/1/bn/Const.npy"          : "res1.bn1.weight",
         "conv2_1/1/conv2_1/1/bn/beta.npy"           : "res1.bn1.bias",
         "conv2_1/1/conv2_1/1/bn/moving_mean.npy"    : "res1.bn1.running_mean",
@@ -154,7 +210,7 @@ def map_tf_to_pt(tf_name):
         "conv2_3/bn/beta.npy"                       : "res2.pre_bn.bias",
         "conv2_3/bn/moving_mean.npy"                : "res2.pre_bn.running_mean",
         "conv2_3/bn/moving_variance.npy"            : "res2.pre_bn.running_var",
-        "conv2_3/1/weights.npy"                     : "res2.conv1.weight",
+        "conv2_3/1/weights.npy"                     : "res2.conv1.conv.weight",
         "conv2_3/1/conv2_3/1/bn/Const.npy"          : "res2.bn1.weight",
         "conv2_3/1/conv2_3/1/bn/beta.npy"           : "res2.bn1.bias",
         "conv2_3/1/conv2_3/1/bn/moving_mean.npy"    : "res2.bn1.running_mean",
@@ -167,7 +223,7 @@ def map_tf_to_pt(tf_name):
         "conv3_1/bn/beta.npy"                       : "res3.pre_bn.bias",
         "conv3_1/bn/moving_mean.npy"                : "res3.pre_bn.running_mean",
         "conv3_1/bn/moving_variance.npy"            : "res3.pre_bn.running_var",
-        "conv3_1/1/weights.npy"                     : "res3.conv1.weight",
+        "conv3_1/1/weights.npy"                     : "res3.conv1.conv.weight",
         "conv3_1/1/conv3_1/1/bn/Const.npy"          : "res3.bn1.weight",
         "conv3_1/1/conv3_1/1/bn/beta.npy"           : "res3.bn1.bias",
         "conv3_1/1/conv3_1/1/bn/moving_mean.npy"    : "res3.bn1.running_mean",
@@ -181,7 +237,7 @@ def map_tf_to_pt(tf_name):
         "conv3_3/bn/beta.npy"                       : "res4.pre_bn.bias",
         "conv3_3/bn/moving_mean.npy"                : "res4.pre_bn.running_mean",
         "conv3_3/bn/moving_variance.npy"            : "res4.pre_bn.running_var",
-        "conv3_3/1/weights.npy"                     : "res4.conv1.weight",
+        "conv3_3/1/weights.npy"                     : "res4.conv1.conv.weight",
         "conv3_3/1/conv3_3/1/bn/Const.npy"          : "res4.bn1.weight",
         "conv3_3/1/conv3_3/1/bn/beta.npy"           : "res4.bn1.bias",
         "conv3_3/1/conv3_3/1/bn/moving_mean.npy"    : "res4.bn1.running_mean",
@@ -195,7 +251,7 @@ def map_tf_to_pt(tf_name):
         "conv4_1/bn/beta.npy"                       : "res5.pre_bn.bias",
         "conv4_1/bn/moving_mean.npy"                : "res5.pre_bn.running_mean",
         "conv4_1/bn/moving_variance.npy"            : "res5.pre_bn.running_var",
-        "conv4_1/1/weights.npy"                     : "res5.conv1.weight",
+        "conv4_1/1/weights.npy"                     : "res5.conv1.conv.weight",
         "conv4_1/1/conv4_1/1/bn/Const.npy"          : "res5.bn1.weight",
         "conv4_1/1/conv4_1/1/bn/beta.npy"           : "res5.bn1.bias",
         "conv4_1/1/conv4_1/1/bn/moving_mean.npy"    : "res5.bn1.running_mean",
@@ -210,7 +266,7 @@ def map_tf_to_pt(tf_name):
         "conv4_3/bn/beta.npy"                       : "res6.pre_bn.bias",
         "conv4_3/bn/moving_mean.npy"                : "res6.pre_bn.running_mean",
         "conv4_3/bn/moving_variance.npy"            : "res6.pre_bn.running_var",
-        "conv4_3/1/weights.npy"                     : "res6.conv1.weight",
+        "conv4_3/1/weights.npy"                     : "res6.conv1.conv.weight",
         "conv4_3/1/conv4_3/1/bn/Const.npy"          : "res6.bn1.weight",
         "conv4_3/1/conv4_3/1/bn/beta.npy"           : "res6.bn1.bias",
         "conv4_3/1/conv4_3/1/bn/moving_mean.npy"    : "res6.bn1.running_mean",
@@ -912,7 +968,7 @@ def init_seed(cfg):
 
     fix_seed(seed, determinism_level)
 
-def save_as_pytorch(model, path="marsPytorch.pth"):
+def save_as_pytorch(model, path="marsPytorch-custom.pth"):
     model_cpu = model.to("cpu")
     torch.save({"model_state_dict": model_cpu.state_dict()}, path)
     print(f"Saved pytorch checkpoint to {path}")

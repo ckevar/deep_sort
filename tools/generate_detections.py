@@ -15,9 +15,26 @@ def _run_in_batches(f, data_dict, out, batch_size):
     for i in range(num_batches):
         s, e = i * batch_size, (i + 1) * batch_size
         batch_data_dict = {k: v[s:e] for k, v in data_dict.items()}
+        aux = f(batch_data_dict)
+        print(f"aux.shape: {aux.shape}")
+        exit(1)
         out[s:e] = f(batch_data_dict)
     if e < len(out):
         batch_data_dict = {k: v[e:] for k, v in data_dict.items()}
+        aux = f(batch_data_dict)
+        print(f"aux.shape: {aux.shape}")
+
+        print(f"{aux[0,0]}")
+        print(f"{aux[0,1]}")
+        print(f"{aux[0,2]}")
+
+        """
+        print(f"{aux[0,0,0,0]}")
+        print(f"{aux[0,0,0,1]}")
+        print(f"{aux[0,0,0,2]}")
+        """
+        exit(1)
+  
         out[e:] = f(batch_data_dict)
 
 
@@ -83,6 +100,18 @@ class ImageEncoder(object):
         self.output_var = tf.compat.v1.get_default_graph().get_tensor_by_name(
             "%s:0" % output_name)
 
+        """
+        graph = self.session.graph
+        for op in graph.get_operations():
+            print(op.name)
+            for tensor in op.outputs:
+                print("  ", tensor.name)
+
+        exit()
+        """
+        self.loi = tf.compat.v1.get_default_graph().get_tensor_by_name(
+                "Flatten/flatten/Reshape:0")
+
         assert len(self.output_var.get_shape()) == 2
         assert len(self.input_var.get_shape()) == 4
         self.feature_dim = self.output_var.get_shape().as_list()[-1]
@@ -91,7 +120,7 @@ class ImageEncoder(object):
     def __call__(self, data_x, batch_size=32):
         out = np.zeros((len(data_x), self.feature_dim), np.float32)
         _run_in_batches(
-            lambda x: self.session.run(self.output_var, feed_dict=x),
+            lambda x: self.session.run(self.loi, feed_dict=x),
             {self.input_var: data_x}, out, batch_size)
         return out
 
