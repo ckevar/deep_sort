@@ -59,7 +59,6 @@ class ResidualBlock(nn.Module):
         if not is_first:
             self.pre_bn = nn.BatchNorm2d(in_channels, eps=1e-3, momentum=0.999)
 
-        #self.conv1 = nn.Conv2d(in_channels, out_channels, 3, stride=stride, padding=1, bias=False)
         self.conv1 = Conv2Same(in_channels, 
                                out_channels, 
                                kernel_size=3, 
