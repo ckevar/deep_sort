@@ -36,13 +36,13 @@ def map_tf_to_pt(tf_name):
 
     mapping = {
         # --- Input convs ---
-        "conv1_1/weights.npy": "conv1.weight",
+        "conv1_1/weights.npy": "conv1.conv.weight",
         "conv1_1/conv1_1/bn/Const.npy": "conv1_bn.weight",
         "conv1_1/conv1_1/bn/beta.npy": "conv1_bn.bias",
         "conv1_1/conv1_1/bn/moving_mean.npy": "conv1_bn.running_mean",
         "conv1_1/conv1_1/bn/moving_variance.npy": "conv1_bn.running_var",
 
-        "conv1_2/weights.npy": "conv2.weight",
+        "conv1_2/weights.npy": "conv2.conv.weight",
         "conv1_2/conv1_2/bn/Const.npy": "conv2_bn.weight",
         "conv1_2/conv1_2/bn/beta.npy": "conv2_bn.bias",
         "conv1_2/conv1_2/bn/moving_mean.npy": "conv2_bn.running_mean",
@@ -54,8 +54,8 @@ def map_tf_to_pt(tf_name):
         "conv2_1/1/conv2_1/1/bn/beta.npy"           : "res1.bn1.bias",
         "conv2_1/1/conv2_1/1/bn/moving_mean.npy"    : "res1.bn1.running_mean",
         "conv2_1/1/conv2_1/1/bn/moving_variance.npy": "res1.bn1.running_var",
-        "conv2_1/2/weights.npy"                     : "res1.conv2.weight",
-        "conv2_1/2/biases.npy"                      : "res1.conv2.bias",
+        "conv2_1/2/weights.npy"                     : "res1.conv2.conv.weight",
+        "conv2_1/2/biases.npy"                      : "res1.conv2.conv.bias",
 
         # Res2
         "conv2_3/bn/Const.npy"                      : "res2.pre_bn.weight",
@@ -67,8 +67,8 @@ def map_tf_to_pt(tf_name):
         "conv2_3/1/conv2_3/1/bn/beta.npy"           : "res2.bn1.bias",
         "conv2_3/1/conv2_3/1/bn/moving_mean.npy"    : "res2.bn1.running_mean",
         "conv2_3/1/conv2_3/1/bn/moving_variance.npy": "res2.bn1.running_var",
-        "conv2_3/2/weights.npy"                     : "res2.conv2.weight",
-        "conv2_3/2/biases.npy"                      : "res2.conv2.bias",
+        "conv2_3/2/weights.npy"                     : "res2.conv2.conv.weight",
+        "conv2_3/2/biases.npy"                      : "res2.conv2.conv.bias",
 
         # Res3
         "conv3_1/bn/Const.npy"                      : "res3.pre_bn.weight",
@@ -80,9 +80,9 @@ def map_tf_to_pt(tf_name):
         "conv3_1/1/conv3_1/1/bn/beta.npy"           : "res3.bn1.bias",
         "conv3_1/1/conv3_1/1/bn/moving_mean.npy"    : "res3.bn1.running_mean",
         "conv3_1/1/conv3_1/1/bn/moving_variance.npy": "res3.bn1.running_var",
-        "conv3_1/2/weights.npy"                     : "res3.conv2.weight",
-        "conv3_1/2/biases.npy"                      : "res3.conv2.bias",
-        "conv3_1/projection/weights.npy"            : "res3.downsample.weight",
+        "conv3_1/2/weights.npy"                     : "res3.conv2.conv.weight",
+        "conv3_1/2/biases.npy"                      : "res3.conv2.conv.bias",
+        "conv3_1/projection/weights.npy"            : "res3.downsample.conv.weight",
 
         # Res4
         "conv3_3/bn/Const.npy"                      : "res4.pre_bn.weight",
@@ -94,9 +94,9 @@ def map_tf_to_pt(tf_name):
         "conv3_3/1/conv3_3/1/bn/beta.npy"           : "res4.bn1.bias",
         "conv3_3/1/conv3_3/1/bn/moving_mean.npy"    : "res4.bn1.running_mean",
         "conv3_3/1/conv3_3/1/bn/moving_variance.npy": "res4.bn1.running_var",
-        "conv3_3/2/weights.npy"                     : "res4.conv2.weight",
-        "conv3_3/2/biases.npy"                      : "res4.conv2.bias",
-        "conv3_3/projection/weights.npy"            : "res4.downsample.weight",
+        "conv3_3/2/weights.npy"                     : "res4.conv2.conv.weight",
+        "conv3_3/2/biases.npy"                      : "res4.conv2.conv.bias",
+        "conv3_3/projection/weights.npy"            : "res4.downsample.conv.weight",
 
         # Res5
         "conv4_1/bn/Const.npy"                      : "res5.pre_bn.weight",
@@ -108,9 +108,9 @@ def map_tf_to_pt(tf_name):
         "conv4_1/1/conv4_1/1/bn/beta.npy"           : "res5.bn1.bias",
         "conv4_1/1/conv4_1/1/bn/moving_mean.npy"    : "res5.bn1.running_mean",
         "conv4_1/1/conv4_1/1/bn/moving_variance.npy": "res5.bn1.running_var",
-        "conv4_1/2/weights.npy"                     : "res5.conv2.weight",
-        "conv4_1/2/biases.npy"                      : "res5.conv2.bias",
-        "conv4_1/projection/weights.npy"            : "res5.downsample.weight",
+        "conv4_1/2/weights.npy"                     : "res5.conv2.conv.weight",
+        "conv4_1/2/biases.npy"                      : "res5.conv2.conv.bias",
+        "conv4_1/projection/weights.npy"            : "res5.downsample.conv.weight",
 
         # Res6
         "conv4_3/bn/Const.npy"                      : "res6.pre_bn.weight",
@@ -122,8 +122,8 @@ def map_tf_to_pt(tf_name):
         "conv4_3/1/conv4_3/1/bn/beta.npy"           : "res6.bn1.bias",
         "conv4_3/1/conv4_3/1/bn/moving_mean.npy"    : "res6.bn1.running_mean",
         "conv4_3/1/conv4_3/1/bn/moving_variance.npy": "res6.bn1.running_var",
-        "conv4_3/2/weights.npy"                     : "res6.conv2.weight",
-        "conv4_3/2/biases.npy"                      : "res6.conv2.bias",
+        "conv4_3/2/weights.npy"                     : "res6.conv2.conv.weight",
+        "conv4_3/2/biases.npy"                      : "res6.conv2.conv.bias",
 
         # --- Final FC + BN ---
         "fc1/weights.npy": "fc.weight",
@@ -201,7 +201,7 @@ def load_tf_constangs_into_mars(tf_constants_dir, model):
 
             state_dict[pt_name].copy_(tensor)
             loaded_count += 1
-            print(f"[LOADED] {tf_name} -> {pt_name} {tensor.shape}")
+            #print(f"[LOADED] {tf_name} -> {pt_name} {tensor.shape}")
 
     model.load_state_dict(state_dict)
     print(f"Done loading TF weights. Total loaded: {loaded_count}")
@@ -223,7 +223,7 @@ def user_config():
                         default="mars-small128-pytorch.pth")
 
     parser.add_argument("--cast",
-                        help="Can either be tf2dir: unfolds the tensorflow graph into a directory tree, or dir2torch: grabs the directory tree tensor flow graph into a pytorch model."
+                        help="Can either be tf2dir: unfolds the tensorflow graph into a directory tree, or dir2torch: grabs the directory tree tensor flow graph into a pytorch model.",
                         type=str,
                         default="tf2dir")
 
@@ -239,4 +239,4 @@ if "__main__" == __name__:
     elif "dir2torch" == args.cast:
         model = MarsSmall128(num_classes=1).cuda()
         load_tf_constangs_into_mars(args.dir, model)
-        save_as_pytorch(model, path=args.new_name)
+        save_as_pytorch(model, path=args.filename)

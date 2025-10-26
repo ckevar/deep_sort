@@ -69,11 +69,13 @@ class ResidualBlock(nn.Module):
         self.elu = nn.ELU(inplace=True)
         self.dropout = nn.Dropout(p=0.4)
 
-        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=True)
+        #self.conv2 = nn.Conv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=True)
+        self.conv2 = Conv2Same(out_channels, out_channels, 3, stride=1, bias=True)
 
         self.downsample = None
         if not same_shape:
-            self.downsample = nn.Conv2d(in_channels, out_channels, 1, stride=stride, bias=False)
+            #self.downsample = nn.Conv2d(in_channels, out_channels, 1, stride=stride, bias=False)
+            self.downsample = Conv2Same(in_channels, out_channels, 1, stride=stride, bias=False)
 
     def forward(self, _in):
         x = _in
@@ -116,9 +118,11 @@ class MarsSmall128(nn.Module):
         super(MarsSmall128, self).__init__()
 
         # Input convs
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=True)   # Output: 128x64x32
+        #self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=True)   # Output: 128x64x32
+        self.conv1 = Conv2Same(3, 32, kernel_size=3, stride=1, bias=True)   # Output: 128x64x32
         self.conv1_bn = nn.BatchNorm2d(32, eps=1e-3, momentum=0.999) 
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=True)  # Output: 128x64x32
+        #self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=True)  # Output: 128x64x32
+        self.conv2 = Conv2Same(32, 32, kernel_size=3, stride=1, bias=True)  # Output: 128x64x32
         self.conv2_bn = nn.BatchNorm2d(32, eps=1e-3, momentum=0.999)
 
         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=0)        # Output: 64x32x32
