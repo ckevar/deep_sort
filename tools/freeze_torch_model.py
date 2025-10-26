@@ -73,14 +73,6 @@ class ResidualBlock(nn.Module):
         x = self.bn1(x)
         x = self.elu(x)
 
-        """
-        if self.downsample:
-            print(f"xout.shape {x.shape}") 
-            print(f"{x[0,0,0,0]}")
-            print(f"{x[0,1,0,0]}")
-            print(f"{x[0,2,0,0]}")
-        """
-
         x = self.dropout(x)
 
         x = self.conv2(x)
@@ -131,12 +123,10 @@ class MarsSmall128(nn.Module):
 
         # Final layers
         self.dropout = nn.Dropout(p=0.4)
-        #self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(16384, 128)
-        self.bn = nn.BatchNorm1d(128)
+        self.bn = nn.BatchNorm1d(128, eps=1e-3, momentum=0.999)
 
         # Optional classifier head
-        #self.classifier = nn.Linear(128, num_classes) if num_classes is not None else None
         self.classifier = CosineClassifier(128, num_classes)
 
     def forward(self, x, return_embedding=False):
@@ -151,9 +141,8 @@ class MarsSmall128(nn.Module):
         x = self.res5(x)
         x = self.res6(x)
 
-            #x = self.global_avg_pool(x)
         x = x.permute(0, 2, 3, 1).contiguous().view(x.size(0), -1)
-        #x = torch.flatten(x, )
+
         """
         print(f"xout.shape {x.shape}") 
         print(f"{x[0,0]}")
