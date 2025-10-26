@@ -393,7 +393,13 @@ def compute_cmc_map_in_gpu(query_feats,
 
     return cmc, mAP
 
-
+from torchvision import transforms
+from torch.utils.data import DataLoader
+from torch.utils.data import Sampler
+import torch.optim as optim
+from torch.amp import GradScaler, autocast
+import random
+from collections import defaultdict
 
 def evaluate_mAP_CMCD(config, model, feat_dims):
     transform_qg = transforms.Compose([
@@ -430,14 +436,6 @@ def evaluate_mAP_CMCD(config, model, feat_dims):
     )
 
 """## 4.3· Training Utils"""
-
-from torchvision import transforms
-from torch.utils.data import DataLoader
-from torch.utils.data import Sampler
-import torch.optim as optim
-from torch.amp import GradScaler, autocast
-import random
-from collections import defaultdict
 
 def init_dataset(config):
 
