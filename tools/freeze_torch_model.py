@@ -422,8 +422,8 @@ def evaluate_mAP_CMCD(config, model, feat_dims):
     query_dataset = ReIDListDataset(root_dir,
                                     f"{root_dir}/{config['query']}",
                                     transform=transform_qg,
-                                    relabel=False)
-    query_dataset.relabel(gallery_dataset.label_map)
+                                    relabel=gallery_dataset.label_map)
+    #query_dataset.relabel(gallery_dataset.label_map)
 
     query_loader = DataLoader(query_dataset,
                               batch_size=config['evaluation']['batch_size'])
