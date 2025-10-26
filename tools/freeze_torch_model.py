@@ -159,14 +159,6 @@ class MarsSmall128(nn.Module):
 
         x = x.permute(0, 2, 3, 1).contiguous().view(x.size(0), -1)
 
-        """
-        print(f"xout.shape {x.shape}") 
-        print(f"{x[0,0]}")
-        print(f"{x[0,1]}")
-        print(f"{x[0,2]}")
-        exit(1)
-        """
-
         x = self.dropout(x)
         x = self.fc(x)
         x = self.bn(x)
@@ -206,25 +198,32 @@ def freeze_model(model, phase):
 
     model.eval()
 
-def unfreeze_backbone(model):
-    for param in model.conv1.parameters(): param.requires_grad = True
-    for param in model.conv1_bn.parameters(): param.requires_grad = True
-    for param in model.conv2.parameters(): param.requires_grad = True
-    for param in model.conv2_bn.parameters(): param.requires_grad = True
+def unfreeze_backbone(model, phase):
+
+    if 6 == phase 
+        for param in model.conv1.parameters(): param.requires_grad = True
+        for param in model.conv1_bn.parameters(): param.requires_grad = True
+        for param in model.conv2.parameters(): param.requires_grad = True
+        for param in model.conv2_bn.parameters(): param.requires_grad = True
+
+    if phase >= 5:
+        for param in model.pool.parameters(): param.requires_grad = True
+        for param in model.res1.parameters(): param.requires_grad = True
+
+    if phase >= 4:
+        for param in model.res2.parameters(): param.requires_grad = True
+        for param in model.res3.parameters(): param.requires_grad = True
+
+    if phase >= 3:
+        for param in model.res4.parameters(): param.requires_grad = True
+        for param in model.res5.parameters(): param.requires_grad = True
+
+    if phase >= 2:
+        for param in model.res6.parameters(): param.requires_grad = True
     
-    for param in model.pool.parameters(): param.requires_grad = True
-    for param in model.res1.parameters(): param.requires_grad = True
-    
-    for param in model.res2.parameters(): param.requires_grad = True
-    for param in model.res3.parameters(): param.requires_grad = True
-    
-    for param in model.res4.parameters(): param.requires_grad = True
-    for param in model.res5.parameters(): param.requires_grad = True
-    
-    for param in model.res6.parameters(): param.requires_grad = True
-    
-    for param in model.fc.parameters(): param.requires_grad = True
-    for param in model.bn.parameters(): param.requires_grad = True
+    if phase >= 1:
+        for param in model.fc.parameters(): param.requires_grad = True
+        for param in model.bn.parameters(): param.requires_grad = True
 
     model.eval()
 
@@ -600,7 +599,7 @@ def fix_seed(seed, determinism_level):
         np.random.seed(seed)
         torch.manual_seed(seed)
         torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)  # if you use multiple GPUs
+        torch.cuda.manual_seed_all(seed)  # Upon multiple GPUs
 
     if 2 == determinism_level:
         torch.backends.cudnn.deterministic = True
@@ -672,7 +671,7 @@ def train(config_file, mode="train", experiment_name="default"):
 
         # Unfreezing the backbone
         if epoch == config["unfreeze_backbone"]["epoch"] and "finetune" == mode:
-            unfreeze_backbone(model)
+            unfreeze_backbone(model, 6)
 
         # Saving checkpoint at epochs multiple of checkpoint_period
         if epoch > 0:
