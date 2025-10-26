@@ -360,41 +360,54 @@ def load_tf_constangs_into_mars(tf_constants_dir, model):
 
 
 def freeze_model(model, phase):
-  if phase >= 2: # Freeze just shallow layers
-    for param in model.conv1.parameters(): param.requires_grad = False
-    for param in model.conv2.parameters(): param.requires_grad = False
-    for param in model.pool.parameters(): param.requires_grad = False
-    for param in model.res1.parameters(): param.requires_grad = False
+    if phase >= 2: # Freeze just shallow layers
+        for param in model.conv1.parameters(): param.requires_grad = False
+        for param in model.conv1_bn.parameters(): param.requires_grad = False
+        for param in model.conv2.parameters(): param.requires_grad = False
+        for param in model.conv2_bn.parameters(): param.requires_grad = False
+  
+    if phase >= 3:
+        for param in model.pool.parameters(): param.requires_grad = False
+        for param in model.res1.parameters(): param.requires_grad = False
+  
+    if phase >= 4: # Freeze half feature descriptor
+        for param in model.res2.parameters(): param.requires_grad = False
+        for param in model.res3.parameters(): param.requires_grad = False
+  
+    if phase >= 5: # Freeze just before the last feature map
+        for param in model.res4.parameters(): param.requires_grad = False
+        for param in model.res5.parameters(): param.requires_grad = False
+  
+    if phase >= 6: # freeze the entire backbone
+        for param in model.res6.parameters(): param.requires_grad = False # Last feature map
+  
+    if 7 == phase:
+        for param in model.fc.parameters(): param.requires_grad = False
+        for param in model.bn.parameters(): param.requires_grad = False
 
-  if phase >= 3: # Freeze half feature descriptor
-    for param in model.res2.parameters(): param.requires_grad = False
-    for param in model.res3.parameters(): param.requires_grad = False
-
-  if phase >= 4: # Freeze just before the last feature map
-    for param in model.res4.parameters(): param.requires_grad = False
-    for param in model.res5.parameters(): param.requires_grad = False
-
-  if 5 == phase: # freeze the entire backbone
-    for param in model.res6.parameters(): param.requires_grad = False # Last feature map
-    for param in model.global_avg_pool.parameters(): param.requires_grad = False
-    for param in model.fc.parameters(): param.requires_grad = False
+    model.eval()
 
 def unfreeze_backbone(model):
-  for param in model.conv1.parameters(): param.requires_grad = True
-  for param in model.conv2.parameters(): param.requires_grad = True
-  for param in model.pool.parameters(): param.requires_grad = True
-  for param in model.res1.parameters(): param.requires_grad = True
+    for param in model.conv1.parameters(): param.requires_grad = True
+    for param in model.conv1_bn.parameters(): param.requires_grad = True
+    for param in model.conv2.parameters(): param.requires_grad = True
+    for param in model.conv2_bn.parameters(): param.requires_grad = True
+    
+    for param in model.pool.parameters(): param.requires_grad = True
+    for param in model.res1.parameters(): param.requires_grad = True
+    
+    for param in model.res2.parameters(): param.requires_grad = True
+    for param in model.res3.parameters(): param.requires_grad = True
+    
+    for param in model.res4.parameters(): param.requires_grad = True
+    for param in model.res5.parameters(): param.requires_grad = True
+    
+    for param in model.res6.parameters(): param.requires_grad = True
+    
+    for param in model.fc.parameters(): param.requires_grad = True
+    for param in model.bn.parameters(): param.requires_grad = True
 
-  for param in model.res2.parameters(): param.requires_grad = True
-  for param in model.res3.parameters(): param.requires_grad = True
-
-  for param in model.res4.parameters(): param.requires_grad = True
-  for param in model.res5.parameters(): param.requires_grad = True
-
-  for param in model.res6.parameters(): param.requires_grad = True
-  for param in model.global_avg_pool.parameters(): param.requires_grad = True
-  for param in model.fc.parameters(): param.requires_grad = True
-  model.eval()
+    model.eval()
 
 """## A.1· Model Utils"""
 
