@@ -206,18 +206,6 @@ def load_tf_constangs_into_mars(tf_constants_dir, model):
     model.load_state_dict(state_dict)
     print(f"Done loading TF weights. Total loaded: {loaded_count}")
 
-
-
-def save_metrics(filename, epoch, average_loss, mAP, cmc, lr):
-    fd = open(filename, 'a')
-    fd.write(f"{epoch + 1} {average_loss:.4f} {mAP:.4f} {cmc[0]:.4f} {cmc[4]:.4f} {cmc[9]:.4f} {lr:.6f}\n")
-    fd.close()
-
-def mk_metrics(filename):
-    fd = open(filename, "w")
-    fd.write("# Epoch Loss mAP Rank-1 Rank-5 Rank-10 lr\n")
-    fd.close()
-
 def save_as_pytorch(model, path="marsPytorch-custom.pth"):
     model_cpu = model.to("cpu")
     torch.save({"model_state_dict": model_cpu.state_dict()}, path)
