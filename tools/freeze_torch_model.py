@@ -244,9 +244,7 @@ def init_lr(cfg):
     return lr, lr_scheduling, lr_schedule_at
 
 
-
 from sklearn.metrics import average_precision_score
-from scipy.spatial.distance import cdist
 import numpy as np
 
 def extract_features(model, loader, feat_dim, num_cams=1):
@@ -403,8 +401,6 @@ def evaluate_mAP_CMCD(config, model, feat_dims):
         transforms.Resize(tuple(config['resize'])),
         transforms.ToTensor(),
         transforms.Lambda(lambda x: x * 255.0),
-        transforms.Lambda(lambda x: x[[2, 1, 0], ...])
-        #transforms.Normalize([0.5]*3, [0.5]*3)
     ])
 
 
