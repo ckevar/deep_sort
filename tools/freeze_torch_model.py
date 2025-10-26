@@ -5,6 +5,20 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from wrntorch.utils import (
+    save_torchWRN_checkpoint, 
+    load_torchWRN_checkpoint, 
+    load_torchWRN_model, 
+    load_torchWRN_finetuning,
+    load_config,
+    save_config,
+    init_logs,
+    mk_metrics,
+    save_metrics
+    )
+
+from wrntorch.dataset import ReIDListDataset
+
 class Conv2Same(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, bias=True):
         super().__init__()
@@ -82,7 +96,6 @@ class ResidualBlock(nn.Module):
         
         x += _in
         return x
-
 
 class CosineClassifier(nn.Module):
     def __init__(self, feat_dim, num_classes):
@@ -212,145 +225,8 @@ def unfreeze_backbone(model):
 
     model.eval()
 
-"""## A.1· Model Utils"""
 
-def save_torchWRN_checkpoint(filename, model, optimizer, epoch, scaler, best_mAP):
-    torch.save({
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'scaler_state_dict': scaler.state_dict(),
-        'best_mAP': best_mAP,
-    }, filename)
-
-def load_torchWRN_checkpoint(filename, model, optimizer, scaler):
-
-    if not os.path.isfile(filename):
-        raise FileNotFoundError(f"\n    No model found to resume: {filename}.")
-
-    checkpoint = torch.load(filename)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    scaler.load_state_dict(checkpoint['scaler_state_dict'])
-
-    start_epoch = checkpoint['epoch'] + 1
-    best_mAP = checkpoint['best_mAP']
-
-    print(f"Resuming training from epoch {start_epoch}.")
-    return start_epoch, best_mAP
-
-def _load_torchWRN_model(filename):
-    if not os.path.isfile(filename):
-        raise FileNotFoundError(f"\n    No model found to resume: {filename}.")
-
-    checkpoint = torch.load(filename)
-    return checkpoint['model_state_dict']
-
-def load_torchWRN_model(filename, model):
-    model.load_state_dict(_load_torchWRN_model(filename))
-
-def load_torchWRN_finetuning(filename, model, mode):
-    checkpoint = _load_torchWRN_model(filename)
-
-    if "finetune" == mode:
-        # load everything except the final classifier layer
-        pretrained_dict = {k: v for k, v in checkpoint.items() if not k.startswith('classifier.')}
-        model_dict = model.state_dict()
-        model_dict.update(pretrained_dict)
-    elif "finetune_keep" == mode:
-        model_dict = checkpoint
-
-    model.load_state_dict(model_dict)
-
-"""# II· Dataset"""
-
-from torch.utils.data import Dataset
-from PIL import Image
-import os
-
-class ReIDListDataset(Dataset):
-    def __init__(self, root_dir, list_path, transform=None, relabel=True):
-        self.root_dir = root_dir
-        self.transform = transform
-        self.samples = []
-
-        with open(list_path, 'r') as f:
-            for line in f:
-                parts = line.strip().split()
-                if len(parts) == 3:
-                    img_path, pid, cam_id = parts
-                else:
-                    raise ValueError(f"Invalid line format in {list_path}: {line}")
-                self.samples.append((img_path, int(pid), int(cam_id)))
-
-        # Map person IDs to class indices starting from 0
-        if relabel:
-          label_map = {pid: idx for idx, pid in enumerate(sorted(set(pid for _, pid, _ in self.samples)))}
-          self.relabel(label_map)
-
-
-    def relabel(self, label_map):
-      self.label_map = label_map
-      new_samples = []
-      for img_path, pid, camid in self.samples:
-        if pid in self.label_map:
-            new_label = self.label_map[pid]
-            new_samples.append((img_path, new_label, camid))
-        else:
-            # PID not in gallery, skip this sample or handle as you wish
-            continue
-      self.samples = new_samples
-      self.classes = list(self.label_map.keys())
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        img_path, label, camid = self.samples[idx]
-        full_path = os.path.join(self.root_dir, img_path)
-
-        with Image.open(full_path) as img:
-          img = img.convert("RGB")
-          if self.transform:
-            img = self.transform(img)
-
-        return img, label, camid
-
-"""# III· Load  Configurations"""
-
-import yaml
-
-def create_logs(cfg, experiment_name):
-    log_dir = cfg["log_dir"]
-    experiment_path = f"{log_dir}/{experiment_name}"
-
-    os.makedirs(log_dir, exist_ok=True)
-    os.makedirs(experiment_path, exist_ok=True)
-
-    cfg["experiment_name"] = experiment_name
-    cfg["experiment_log_dir"] = experiment_path
-
-def load_config(config_filename):
-
-    with open(config_filename, 'r') as f:
-        config = yaml.safe_load(f)
-
-    if config['training']['k'] > config['patches_per_id']:
-        raise ValueError("\n    Images per id K:",
-                         config['training']['k'],
-                         "cannot be greater than total patches per ID",
-                         config['patched_per_id'])
-
-    return config
-
-def save_config(cfg):
-    cfg_filename = f"{cfg['experiment_log_dir']}/config.yaml"
-    yaml_str = yaml.safe_dump(cfg)
-    with open(cfg_filename, "w") as f:
-        f.write(yaml_str)
-        
-
-def lr_config(cfg):
+def init_lr(cfg):
     try:
         lr_scheduling = cfg['training']['lr_scheduling']
     except:
@@ -367,10 +243,7 @@ def lr_config(cfg):
 
     return lr, lr_scheduling, lr_schedule_at
 
-"""# IV· Training
 
-## 4.1· Model Evaluation Utils
-"""
 
 from sklearn.metrics import average_precision_score
 from scipy.spatial.distance import cdist
@@ -561,20 +434,6 @@ def evaluate_mAP_CMCD(config, model, feat_dims):
       batch_size=512000
     )
 
-"""resumeaasassas ## 4.2· Metrics Files Manager  ss as"""
-
-import os
-
-def save_metrics(filename, epoch, average_loss, mAP, cmc, lr):
-    fd = open(filename, 'a')
-    fd.write(f"{epoch + 1} {average_loss:.4f} {mAP:.4f} {cmc[0]:.4f} {cmc[4]:.4f} {cmc[9]:.4f} {lr:.6f}\n")
-    fd.close()
-
-def mk_metrics(filename):
-    fd = open(filename, "w")
-    fd.write("# Epoch Loss mAP Rank-1 Rank-5 Rank-10 lr\n")
-    fd.close()
-
 """## 4.3· Training Utils"""
 
 from torchvision import transforms
@@ -585,18 +444,6 @@ from torch.amp import GradScaler, autocast
 import random
 from collections import defaultdict
 
-def mk_filenames(config):
-
-    log_dir = config["experiment_log_dir"]
-    experiment_name = f"{log_dir}/%s_lr{config['training']['lr']}_p{config['training']['p']}_k{config['training']['k']}.%s"
-
-    metrics_filename = experiment_name % ("results", "dat")
-    model_filename = experiment_name % ("model", "pth")
-
-    config['metrics_filename'] = metrics_filename
-    config['model_filename'] = model_filename
-
-
 def init_dataset(config):
 
     transform = transforms.Compose([
@@ -604,8 +451,6 @@ def init_dataset(config):
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
         transforms.ToTensor(),
         transforms.Lambda(lambda x: x * 255.0),
-        transforms.Lambda(lambda x: x[[2, 1, 0], ...])
-        #transforms.Normalize([0.5]*3, [0.5]*3)
     ])
 
     root_dir = config["root_dir"]
@@ -787,7 +632,6 @@ def init_seed(cfg):
 def train(config_file, mode="train", experiment_name="default"):
     config = load_config(config_file)
     init_seed(config)
-    create_logs(config, experiment_name)
 
     ending_epoch = config['training']['epochs']
     try:
@@ -797,12 +641,12 @@ def train(config_file, mode="train", experiment_name="default"):
         config['training']["memory_bank"] = False
 
     # Learning Rate related
-    lr, lr_scheduling, lr_schedule_at = lr_config(config)
+    lr, lr_scheduling, lr_schedule_at = init_lr(config)
     if lr_schedule_at:
         print(f"LR Scheduled @ {lr_schedule_at}")
 
-    # Filenames Model and Metrics
-    mk_filenames(config)
+    # Directories, Filenames Model and Metrics
+    init_logs(config, experiment_name)
     print(f"Metrics @ {config['metrics_filename']}, Model @ {config['model_filename']}")
 
     # Init Dataset
@@ -823,6 +667,7 @@ def train(config_file, mode="train", experiment_name="default"):
 
     if use_memory_bank:
         memory_bank = init_memory_bank(128, criterion, config)
+
     # Training the model
     for epoch in range(start_epoch, ending_epoch):
         model.train()
@@ -902,20 +747,6 @@ def train(config_file, mode="train", experiment_name="default"):
         print(f"Epoch\t\tLoss\tmAP\tRank-1\tRank-5\tRank-10")
         print(f"{epoch + 1}\t\t{average_loss:.4f}\t{mAP:.4f}\t{cmc[0]:.4f}\t{cmc[4]:.4f}\t{cmc[9]:.4f}\t{lr:.6f}")
 
-        # Freeze Batch Norm
-        """
-        if mAP > config["stop_guard"]["min_mAP"] and epoch > config["stop_guard"]["min_epoch"]:
-            print(f"It might be a good idea to freeze a few epochs beyond this epoch: {epoch}.")
-            save_torchWRN_checkpoint(config["model_filename"] + f"_peaked_at{epoch}", model, optimizer, epoch)
-            # This is for debugging the network only:
-
-            for m in model.modules():
-                if isinstance(m, nn.BatchNorm2d):
-                    m.eval()              # stop BN from drifting
-            for p in model.classifier.parameters():
-                p.requires_grad = False   # stop the classifier from rotating features
-        """
-
 import argparse
 def user_config():
     parser = argparse.ArgumentParser("WRN Trainer")
@@ -939,9 +770,3 @@ if "__main__" == __name__:
     args = user_config()
     train(args.cfg, mode=args.mode, experiment_name=args.experiment_name)
 
-    """
-    # This is just to send the parameters from tensorflow v1 to pytorch.
-    model = MarsSmall128(num_classes=1).cuda()
-    load_tf_constangs_into_mars("/home/chris/Documents/Code/mot/experiments/trackers/deep_sort/tools/tf_constants", model)
-    save_as_pytorch(model)
-    """
