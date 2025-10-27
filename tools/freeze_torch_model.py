@@ -200,7 +200,7 @@ def freeze_model(model, phase):
 
 def unfreeze_backbone(model, phase):
 
-    if 6 == phase 
+    if 6 == phase:
         for param in model.conv1.parameters(): param.requires_grad = True
         for param in model.conv1_bn.parameters(): param.requires_grad = True
         for param in model.conv2.parameters(): param.requires_grad = True
