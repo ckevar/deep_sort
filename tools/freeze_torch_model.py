@@ -710,8 +710,12 @@ def train(config_file, mode="train", experiment_name="default"):
             scaler.step(optimizer)
             scaler.update()
 
+
             running_loss += loss.item()
 
+            # Terminate the experiment as soon as soon as the loss crashes.
+            if torch.isnan(loss).any():
+                break
 
         del images, labels, outputs
         torch.cuda.empty_cache()
