@@ -167,7 +167,7 @@ class MarsSmall128(nn.Module):
         x = F.normalize(x, p=2, dim=1)
 
         if self.classifier and not return_embedding:
-            return self.classifier(x)
+            return x, self.classifier(x)
         return x
 
 def freeze_model(model, phase):
@@ -544,14 +544,15 @@ class MemoryBank(object):
         self.labels = torch.zeros(membank_sz, dtype=torch.long)
         self.temp = 0.7
 
-    def criterion(self, outputs, labels):
+    def criterion(self, feats, labels):
 
         bank = self.bank.to("cuda")
         bank_labels = self.labels.to("cuda")
 
-        logits = torch.matmul(outputs, bank.T) / self.temp
+        logits = torch.matmul(feats, bank.T) / self.temp
 
         targets = torch.zeros_like(labels)
+
         for i, lbl in enumerate(labels):
             pos_indices = (bank_labels == lbl).nonzero(as_tuple=True)[0]
 
@@ -560,7 +561,7 @@ class MemoryBank(object):
 
         loss = self.loss_fn(logits, targets)
         
-        self.__update__(outputs, labels)
+        self.__update__(feats, labels)
 
         return loss
 
@@ -700,10 +701,11 @@ def train(config_file, mode="train", experiment_name="default"):
 
 
                 if use_memory_bank:
-                    outputs = model(images, return_embedding=True)  # returns Embeddings
+                    outputs, logits = model(images, return_embedding=False)  # returns Embeddings
                     loss = memory_bank.criterion(outputs, labels)
+                    loss = loss + criterion(logits, labels)
                 else:
-                    outputs = model(images, return_embedding=False)  # returns logits
+                    outputs, _ = model(images, return_embedding=False)  # returns logits
                     loss = criterion(outputs, labels)
 
             scaler.scale(loss).backward()
@@ -718,6 +720,7 @@ def train(config_file, mode="train", experiment_name="default"):
                 break
 
         del images, labels, outputs
+        if use_memory_bank: del logits
         torch.cuda.empty_cache()
 
         average_loss = running_loss / len(train_loader)
