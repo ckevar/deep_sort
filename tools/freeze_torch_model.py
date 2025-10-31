@@ -143,7 +143,8 @@ class MarsSmall128(nn.Module):
         self.bn = nn.BatchNorm1d(128, eps=1e-3, momentum=0.999)
 
         # Optional classifier head
-        self.classifier = CosineClassifier(128, num_classes)
+        #self.classifier = CosineClassifier(128, num_classes)
+        self.classifier = nn.Linear(128, num_classes)
 
     def forward(self, x, return_embedding=False):
         x = self.elu(self.conv1_bn(self.conv1(x)))
@@ -705,7 +706,7 @@ def train(config_file, mode="train", experiment_name="default"):
                     loss = memory_bank.criterion(outputs, labels)
                     loss = loss + criterion(logits, labels)
                 else:
-                    outputs, _ = model(images, return_embedding=False)  # returns logits
+                    _, outputs = model(images, return_embedding=False)  # returns logits
                     loss = criterion(outputs, labels)
 
             scaler.scale(loss).backward()
