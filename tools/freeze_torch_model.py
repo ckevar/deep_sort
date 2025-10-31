@@ -656,7 +656,7 @@ def train(config_file, mode="train", experiment_name="default"):
     model = MarsSmall128(num_classes=num_classes).cuda()
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-8)
     scaler = GradScaler(torch.device('cuda'))   # Automatic Mixed Precision
 
     start_epoch, best_mAP = init_model_to_train(config, mode, model, optimizer, scaler)
