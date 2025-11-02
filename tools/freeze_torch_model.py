@@ -732,6 +732,9 @@ def train(config_file, mode="train", experiment_name="default"):
                     loss = criterion(outputs, labels)
 
             scaler.scale(loss).backward()
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
             scaler.step(optimizer)
             scaler.update()
 
