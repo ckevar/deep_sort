@@ -142,7 +142,11 @@ class MarsSmall128(nn.Module):
         self.fc = nn.Linear(16384, 128)
         self.bn = nn.BatchNorm1d(128, eps=1e-3, momentum=0.999)
 
-        # Optional classifier head
+        # Optional classifier head: porint of failure #FAIL #Fail #failure #fail
+        # I have ran many experiments and im not sure which model or when a 
+        # certain is using a linear classifier or a softmax classifier, like the
+        # one for the deepSORT paper.
+
         #self.classifier = CosineClassifier(128, num_classes)
         self.classifier = nn.Linear(128, num_classes)
 
@@ -627,7 +631,7 @@ def init_seed(cfg):
 
     fix_seed(seed, determinism_level)
 
-def unfreeze_backbone_attemp(model, curr_epoch, cfg):
+def unfreeze_backbone_attemp(model, optimizer, curr_epoch, cfg):
 
     if not curr_epoch in cfg["uepoch"]:
         return
@@ -691,7 +695,7 @@ def train(config_file, mode="train", experiment_name="default"):
 
         # Unfreezing the backbone
         if "finetune" == mode:
-            unfreeze_backbone_attemp(model, epoch, config["unfreeze_backbone"])
+            unfreeze_backbone_attemp(model, optimizer, epoch, config["unfreeze_backbone"])
 
         # Saving checkpoint at epochs multiple of checkpoint_period
         if epoch > 0:
