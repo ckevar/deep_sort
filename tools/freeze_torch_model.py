@@ -638,7 +638,7 @@ def unfreeze_backbone_attemp(model, curr_epoch, cfg):
     if cfg["ulr"] is None:
         return
 
-    if cfg["url"][idx_cfg] is None:
+    if cfg["ulr"][idx_cfg] is None:
         return
 
     for param_group in optimizer.param_groups:
