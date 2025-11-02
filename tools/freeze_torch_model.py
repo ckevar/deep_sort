@@ -143,8 +143,8 @@ class MarsSmall128(nn.Module):
         self.bn = nn.BatchNorm1d(128, eps=1e-3, momentum=0.999)
 
         # Optional classifier head
-        #self.classifier = CosineClassifier(128, num_classes)
-        self.classifier = nn.Linear(128, num_classes)
+        self.classifier = CosineClassifier(128, num_classes)
+        #self.classifier = nn.Linear(128, num_classes)
 
     def forward(self, x, return_embedding=False):
         x = self.elu(self.conv1_bn(self.conv1(x)))
@@ -627,6 +627,24 @@ def init_seed(cfg):
 
     fix_seed(seed, determinism_level)
 
+def unfreeze_backbone_attemp(model, curr_epoch, cfg):
+
+    if not curr_epoch in cfg["uepoch"]:
+        return
+
+    idx_cfg = cfg["uepoch"].index(curr_epoch)
+    unfreeze_backbone(model, cfg["uphase"][idx_cfg])
+    
+    if cfg["ulr"] is None:
+        return
+
+    if cfg["url"][idx_cfg] is None:
+        return
+
+    for param_group in optimizer.param_groups:
+        param_group["lr"] = cfg["ulr"][idx_cfg]
+
+
 def train(config_file, mode="train", experiment_name="default"):
     config = load_config(config_file)
     init_seed(config)
@@ -672,11 +690,8 @@ def train(config_file, mode="train", experiment_name="default"):
         running_loss = 0.0
 
         # Unfreezing the backbone
-        if epoch == config["unfreeze_backbone"]["uepoch"] and "finetune" == mode:
-            unfreeze_backbone(model, config["unfreeze_backbone"]["uphase"])
-            if not (config["unfreeze_backbone"]["ulr"] is None):
-                for param_group in optimizer.param_groups:
-                    param_group["lr"] = config["unfreeze_backbone"]["ulr"]
+        if "finetune" == mode:
+            unfreeze_backbone_attemp(model, epoch, config["unfreeze_backbone"])
 
         # Saving checkpoint at epochs multiple of checkpoint_period
         if epoch > 0:
