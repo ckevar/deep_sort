@@ -672,8 +672,8 @@ def train(config_file, mode="train", experiment_name="default"):
         running_loss = 0.0
 
         # Unfreezing the backbone
-        if epoch == config["unfreeze_backbone"]["epoch"] and "finetune" == mode:
-            unfreeze_backbone(model, 6)
+        if epoch == config["unfreeze_backbone"]["uepoch"] and "finetune" == mode:
+            unfreeze_backbone(model, config["unfreeze_backbone"]["uphase"])
 
         # Saving checkpoint at epochs multiple of checkpoint_period
         if epoch > 0:
