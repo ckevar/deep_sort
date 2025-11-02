@@ -707,7 +707,7 @@ def train(config_file, mode="train", experiment_name="default"):
                 if use_memory_bank:
                     outputs, logits = model(images, return_embedding=False)  # returns Embeddings
                     loss = memory_bank.criterion(outputs, labels)
-                    loss = loss + criterion(logits, labels)
+                    #loss = loss + criterion(logits, labels)
                 else:
                     _, outputs = model(images, return_embedding=False)  # returns logits
                     loss = criterion(outputs, labels)
