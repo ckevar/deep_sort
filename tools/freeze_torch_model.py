@@ -147,8 +147,8 @@ class MarsSmall128(nn.Module):
         # certain is using a linear classifier or a softmax classifier, like the
         # one for the deepSORT paper.
 
-        #self.classifier = CosineClassifier(128, num_classes)
-        self.classifier = nn.Linear(128, num_classes)
+        self.classifier = CosineClassifier(128, num_classes)
+        #self.classifier = nn.Linear(128, num_classes)
 
     def forward(self, x, return_embedding=False):
         x = self.elu(self.conv1_bn(self.conv1(x)))
