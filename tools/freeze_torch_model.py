@@ -589,6 +589,68 @@ class MemoryBank(object):
         self.labels[self.ptr:self.ptr + n] = labels[:n]
         self.ptr = (self.ptr + n) % self.size
 
+import torch
+import torch.nn.functional as F
+
+class TripletLoss(torch.nn.Module):
+    def __init__(self, margin=0.2):
+        super().__init__()
+        self.margin = margin
+
+    def forward(self, feats, labels):
+        # Normalize embeddings for cosine distance
+        feats = F.normalize(feats, dim=1)
+
+        # Compute pairwise distances (1 - cosine similarity)
+        # Using (1 - sim) is safer than (sqrt(sum_sq))
+        dist = 1 - (feats @ feats.T)
+
+        N = feats.size(0)
+        loss = 0.0
+        triplets = 0
+
+        for i in range(N):
+            anchor_label = labels[i]
+            pos_mask = labels == anchor_label
+            neg_mask = labels != anchor_label
+
+            pos_dists = dist[i][pos_mask]
+            neg_dists = dist[i][neg_mask]
+
+            # --- BUG FIX #2: Check for empty tensors to prevent NaN ---
+            # Check if there are any negatives *at all*
+            if neg_dists.numel() == 0:
+                continue
+
+            # Remove the anchor itself (distance = 0)
+            # Use a small epsilon for numerical stability
+            pos_dists = pos_dists[pos_dists > 1e-6] 
+
+            # Check if there are any *other* positives
+            if pos_dists.numel() == 0:
+                continue
+            # --- END BUG FIX #2 ---
+
+
+            # --- BUG FIX #1: Find HARDEST pairs, not easiest ---
+            hardest_pos = pos_dists.max() # Farthest positive
+            hardest_neg = neg_dists.min() # Closest negative
+            # --- END BUG FIX #1 ---
+
+            triplet_loss = F.relu(hardest_pos - hardest_neg + self.margin)
+            
+            # Only add to the loss if the triplet is "active"
+            if triplet_loss > 0:
+                loss += triplet_loss
+                triplets += 1
+
+        # Avoid division by zero if no active triplets were found
+        if triplets == 0:
+            # Return a zero tensor that still requires gradients
+            return torch.tensor(0.0, requires_grad=True, device=feats.device)
+
+        return loss / triplets
+
 def init_memory_bank(ft_sz, criterion, cfg):
    batch_sz = cfg['training']['p'] * cfg['training']['k']
    membank_sz = cfg['training']['memory_bank_sz']
@@ -688,7 +750,8 @@ def train(config_file, mode="train", experiment_name="default"):
     # Init training hyper parameters
     model = MarsSmall128(num_classes=num_classes).cuda()
 
-    criterion = nn.CrossEntropyLoss()
+    # criterion = nn.CrossEntropyLoss()
+    criterion = TripletLoss(margin=0.2)
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-8)
     scaler = GradScaler(torch.device('cuda'))   # Automatic Mixed Precision
 
@@ -737,8 +800,9 @@ def train(config_file, mode="train", experiment_name="default"):
                     loss = memory_bank.criterion(outputs, labels)
                     #loss = loss + criterion(logits, labels)
                 else:
-                    _, outputs = model(images, return_embedding=False)  # returns logits
-                    loss = criterion(outputs, labels)
+                    feats, outputs = model(images, return_embedding=False)  # returns logits
+                    #loss = criterion(outputs, labels)
+                    loss = criterion(feats, labels)
 
             scaler.scale(loss).backward()
 
