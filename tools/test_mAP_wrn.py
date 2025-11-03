@@ -208,7 +208,7 @@ def load_model(cfg):
         torch.set_grad_enabled(False)
         model.to("cuda")
         model.eval()
-        return model, (128, 64)
+        return model, (64, 128)
 
 def compute_metrics(cfg):
     

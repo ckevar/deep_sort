@@ -556,8 +556,16 @@ class MemoryBank(object):
 
         logits = torch.matmul(feats, bank.T) / self.temp
 
-        targets = torch.zeros_like(labels)
+        targets = (labels.unsqueeze(1) == bank_labels.unsqueeze(0)).float()
+        log_probs = torch.nn.functional.log_softmax(logits, dim=1)
+        nll_loss_per_sample = -(log_probs * targets).sum(dim=1)
+        num_positives = targets.sum(dim=1)
+        num_positives[num_positives == 0] = 1.0
+        loss = (nll_loss_per_sample / num_positives).mean()
 
+
+        """
+        targets = torch.zeros_like(labels)
         for i, lbl in enumerate(labels):
             pos_indices = (bank_labels == lbl).nonzero(as_tuple=True)[0]
 
@@ -565,6 +573,7 @@ class MemoryBank(object):
                 targets[i] = pos_indices[0]
 
         loss = self.loss_fn(logits, targets)
+        """
         
         self.__update__(feats, labels)
 
