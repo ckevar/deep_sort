@@ -710,7 +710,7 @@ def unfreeze_backbone_attemp(model, optimizer, curr_epoch, cfg):
         param_group["lr"] = cfg["ulr"][idx_cfg]
 
 class Criterion(torch.nn.Module):
-    def __init__(self, config):
+    def __init__(self, cfg):
         super().__init__()
         mode = cfg["criterion"]
 
