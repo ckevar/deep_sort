@@ -709,33 +709,12 @@ def unfreeze_backbone_attemp(model, optimizer, curr_epoch, cfg):
     for param_group in optimizer.param_groups:
         param_group["lr"] = cfg["ulr"][idx_cfg]
 
-def evaluate_criterion(crits, labels, feats, logits):
-    """
-    Crits is a tuple of criterions:
-        - 0: Cross Entropy
-        - 1: Triplet Loss
-    """
-    if not (crits[0] is None) and not(crits[1] is None):
-        loss = crits[0](logits, labels)
-        loss = loss + crits[1](feats, labels)
-
-    elif not (criterion_ce is None):
-        loss = crits[0](logits, labels)
-
-    elif not (crits[1] is None):
-        loss = crits[1](feats, labels)
-
-    else:
-        raise ValueError("Something went wrong on criterion evaluation.")
-
-    return loss
-
 class Criterion(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
         mode = cfg["criterion"]
 
-        self.criterion = [None. None]
+        self.criterion = [None, None]
 
         if "crossentropy" == mode:
             self.criterion[0] = nn.CrossEntropyLoss()
@@ -767,28 +746,6 @@ class Criterion(torch.nn.Module):
         else:
             raise ValueError("Something went wrong during loss calculation. Make sure the criterios are correctly set in the configuration.")
 
-
-
-def init_criterion(cfg):
-    criterion_ce = None
-    criterion_tl = None
-    criterion_config = cfg["training"]["criterion"]
-
-    if "crossentropy" == criterion_config:
-        criterion_ce = nn.CrossEntropyLoss()
-
-    elif "tripletloss" == criterion_config:
-        criterion_tl = TripletLoss(margin=0.2)
-
-    elif "both" == criterion_config:
-        criterion_ce = nn.CrossEntropyLoss()
-        criterion_tl = TripletLoss(margin=0.2)
-
-    else:
-        criterion_tl = TripletLoss(margin=0.2)
-
-    return criterion_ce, criterion_tl
- 
 def train(config_file, mode="train", experiment_name="default"):
     config = load_config(config_file)
     init_seed(config)
