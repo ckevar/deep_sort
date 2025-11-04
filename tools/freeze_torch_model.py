@@ -733,6 +733,7 @@ class Criterion(torch.nn.Module):
             self.mode = 1
 
     def forward(self, feats, logits, labels):
+
         if 0 == self.mode: # cross entropy alone
             return self.criterion[0](logits, labels)
 
@@ -741,6 +742,7 @@ class Criterion(torch.nn.Module):
 
         elif 2 == self.mode: # Cross entropy + Triplet Loss
             loss = self.criterion[0](logits, labels)
+            loss *= 0.15
             loss = loss + self.criterion[1](feats, labels)
             return loss
         else:
