@@ -728,7 +728,7 @@ class Criterion(torch.nn.Module):
             self.criterion[0] = nn.CrossEntropyLoss()
             self.criterion[1] = TripletLoss(margin=0.2)
             self.mode = 2
-        else 
+        else:
             self.criterion[1] = TripletLoss(margin=0.2)
             self.mode = 1
 
