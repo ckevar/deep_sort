@@ -427,7 +427,6 @@ def evaluate_mAP_CMCD(config, model, feat_dims):
                                     f"{root_dir}/{config['query']}",
                                     transform=transform_qg,
                                     label=gallery_dataset.label_map)
-    #query_dataset.relabel(gallery_dataset.label_map)
 
     query_loader = DataLoader(query_dataset,
                               batch_size=config['evaluation']['batch_size'])
@@ -589,20 +588,15 @@ class MemoryBank(object):
         self.labels[self.ptr:self.ptr + n] = labels[:n]
         self.ptr = (self.ptr + n) % self.size
 
-import torch
-import torch.nn.functional as F
-
 class TripletLoss(torch.nn.Module):
     def __init__(self, margin=0.2):
         super().__init__()
         self.margin = margin
 
     def forward(self, feats, labels):
-        # Normalize embeddings for cosine distance
-        feats = F.normalize(feats, dim=1)
-
-        # Compute pairwise distances (1 - cosine similarity)
-        # Using (1 - sim) is safer than (sqrt(sum_sq))
+        """
+        Feats need to be l2-normalised.
+        """
         dist = 1 - (feats @ feats.T)
 
         N = feats.size(0)
@@ -617,25 +611,21 @@ class TripletLoss(torch.nn.Module):
             pos_dists = dist[i][pos_mask]
             neg_dists = dist[i][neg_mask]
 
-            # --- BUG FIX #2: Check for empty tensors to prevent NaN ---
-            # Check if there are any negatives *at all*
+            # prevent nans
             if neg_dists.numel() == 0:
                 continue
 
             # Remove the anchor itself (distance = 0)
-            # Use a small epsilon for numerical stability
             pos_dists = pos_dists[pos_dists > 1e-6] 
 
             # Check if there are any *other* positives
             if pos_dists.numel() == 0:
                 continue
-            # --- END BUG FIX #2 ---
 
 
-            # --- BUG FIX #1: Find HARDEST pairs, not easiest ---
+            # Find HARDEST pairs, not easiest
             hardest_pos = pos_dists.max() # Farthest positive
             hardest_neg = neg_dists.min() # Closest negative
-            # --- END BUG FIX #1 ---
 
             triplet_loss = F.relu(hardest_pos - hardest_neg + self.margin)
             
@@ -719,7 +709,86 @@ def unfreeze_backbone_attemp(model, optimizer, curr_epoch, cfg):
     for param_group in optimizer.param_groups:
         param_group["lr"] = cfg["ulr"][idx_cfg]
 
+def evaluate_criterion(crits, labels, feats, logits):
+    """
+    Crits is a tuple of criterions:
+        - 0: Cross Entropy
+        - 1: Triplet Loss
+    """
+    if not (crits[0] is None) and not(crits[1] is None):
+        loss = crits[0](logits, labels)
+        loss = loss + crits[1](feats, labels)
 
+    elif not (criterion_ce is None):
+        loss = crits[0](logits, labels)
+
+    elif not (crits[1] is None):
+        loss = crits[1](feats, labels)
+
+    else:
+        raise ValueError("Something went wrong on criterion evaluation.")
+
+    return loss
+
+class Criterion(torch.nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        mode = cfg["criterion"]
+
+        self.criterion = [None. None]
+
+        if "crossentropy" == mode:
+            self.criterion[0] = nn.CrossEntropyLoss()
+            self.mode = 0
+
+        elif "tripletloss" == mode:
+            self.criterion[1] = TripletLoss(margin=0.2)
+            self.mode = 1
+
+        elif "both" == mode:
+            self.criterion[0] = nn.CrossEntropyLoss()
+            self.criterion[1] = TripletLoss(margin=0.2)
+            self.mode = 2
+        else 
+            self.criterion[1] = TripletLoss(margin=0.2)
+            self.mode = 1
+
+    def forward(self, feats, logits, labels):
+        if 0 == self.mode: # cross entropy alone
+            return self.criterion[0](logits, labels)
+
+        elif 1 == self.mode: # Triplet Loss alone
+            return self.criterion[1](feats, labels)
+
+        elif 2 == self.mode: # Cross entropy + Triplet Loss
+            loss = self.criterion[0](logits, labels)
+            loss = loss + self.criterion[1](feats, labels)
+            return loss
+        else:
+            raise ValueError("Something went wrong during loss calculation. Make sure the criterios are correctly set in the configuration.")
+
+
+
+def init_criterion(cfg):
+    criterion_ce = None
+    criterion_tl = None
+    criterion_config = cfg["training"]["criterion"]
+
+    if "crossentropy" == criterion_config:
+        criterion_ce = nn.CrossEntropyLoss()
+
+    elif "tripletloss" == criterion_config:
+        criterion_tl = TripletLoss(margin=0.2)
+
+    elif "both" == criterion_config:
+        criterion_ce = nn.CrossEntropyLoss()
+        criterion_tl = TripletLoss(margin=0.2)
+
+    else:
+        criterion_tl = TripletLoss(margin=0.2)
+
+    return criterion_ce, criterion_tl
+ 
 def train(config_file, mode="train", experiment_name="default"):
     config = load_config(config_file)
     init_seed(config)
@@ -750,8 +819,7 @@ def train(config_file, mode="train", experiment_name="default"):
     # Init training hyper parameters
     model = MarsSmall128(num_classes=num_classes).cuda()
 
-    # criterion = nn.CrossEntropyLoss()
-    criterion = TripletLoss(margin=0.2)
+    criterions = Criterion(config["training"])
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-8)
     scaler = GradScaler(torch.device('cuda'))   # Automatic Mixed Precision
 
@@ -794,23 +862,20 @@ def train(config_file, mode="train", experiment_name="default"):
             # Automatic Mixed Precision (only works in cuda
             with autocast(device_type=torch.device("cuda").type):
 
-
+                feats, logits = model(images, return_embedding=False)  # returns Embeddings
                 if use_memory_bank:
-                    outputs, logits = model(images, return_embedding=False)  # returns Embeddings
-                    loss = memory_bank.criterion(outputs, labels)
-                    #loss = loss + criterion(logits, labels)
+                    loss = memory_bank.criterion(feats, labels)
                 else:
-                    feats, outputs = model(images, return_embedding=False)  # returns logits
-                    #loss = criterion(outputs, labels)
-                    loss = criterion(feats, labels)
+                    loss = criterion(feats, logits, labels)
 
+            
             scaler.scale(loss).backward()
-
+            
+            # Avoids nans
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
             scaler.step(optimizer)
             scaler.update()
-
 
             running_loss += loss.item()
 
@@ -818,8 +883,7 @@ def train(config_file, mode="train", experiment_name="default"):
             if torch.isnan(loss).any():
                 break
 
-        del images, labels, outputs
-        if use_memory_bank: del logits
+        del images, labels, feats, logits
         torch.cuda.empty_cache()
 
         average_loss = running_loss / len(train_loader)
