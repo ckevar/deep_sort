@@ -282,8 +282,8 @@ plot() {
 plotc() {
   COL="$1"
   shift 1
-
-  PLOT_CMD="plot"
+  PLOT_CMD="set grid"
+  PLOT_CMD="$PLOT_CMD; set key bottom; plot"
   for DATA in "${@}"; do
     PLOT_CMD="$PLOT_CMD '$DATA' u 1:$COL w l,"
   done
