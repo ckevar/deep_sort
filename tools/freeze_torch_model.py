@@ -741,9 +741,9 @@ class Criterion(torch.nn.Module):
             return self.criterion[1](feats, labels)
 
         elif 2 == self.mode: # Cross entropy + Triplet Loss
-            loss = self.criterion[0](logits, labels)
-            loss *= 0.15
-            loss = loss + self.criterion[1](feats, labels)
+            lossCE = self.criterion[0](logits, labels)
+            lossTP = self.criterion[1](feats, labels)
+            loss = 0.15 * lossCE + lossTP
             return loss
         else:
             raise ValueError("Something went wrong during loss calculation. Make sure the criterios are correctly set in the configuration.")

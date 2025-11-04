@@ -279,6 +279,17 @@ plot() {
   gnuplot -p -e "$PLOT_CMD"
 }
 
+plotc() {
+  COL="$1"
+  shift 1
+
+  PLOT_CMD="plot"
+  for DATA in "${@}"; do
+    PLOT_CMD="$PLOT_CMD '$DATA' u 1:$COL w l,"
+  done
+  gnuplot -p -e "$PLOT_CMD"
+}
+
 blacklist() {
   DATASET_ID="$1"
   EXP_ID="$2"
@@ -354,6 +365,9 @@ if [ "download" = "$TASK" ]; then
 # PLOTTINGS
 elif [ "plot" = "$TASK" ]; then
   plot "$DATASET_ID" "$EXP_ID" "$@"
+
+elif [ "plotc" = "$TASK" ]; then
+  plotc "$EXP_ID" "$@"
 
 # BLACK LIST: This are experiments that are not plotten for every category
 elif [ "blacklist" = "$TASK" ]; then
