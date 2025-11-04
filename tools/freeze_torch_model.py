@@ -732,7 +732,7 @@ class Criterion(torch.nn.Module):
             self.criterion[1] = TripletLoss(margin=0.2)
             self.mode = 1
 
-    def forward(self, feats, logits, labels):
+    def forward(self, feats, logits, labels, epoch):
 
         if 0 == self.mode: # cross entropy alone
             return self.criterion[0](logits, labels)
@@ -741,9 +741,13 @@ class Criterion(torch.nn.Module):
             return self.criterion[1](feats, labels)
 
         elif 2 == self.mode: # Cross entropy + Triplet Loss
+            alpha = 0.15
+            if 45 == epoch:
+                alpha = 0.22
+
             lossCE = self.criterion[0](logits, labels)
             lossTP = self.criterion[1](feats, labels)
-            loss = 0.15 * lossCE + lossTP
+            loss = alpha * lossCE + lossTP
             return loss
         else:
             raise ValueError("Something went wrong during loss calculation. Make sure the criterios are correctly set in the configuration.")
@@ -825,7 +829,7 @@ def train(config_file, mode="train", experiment_name="default"):
                 if use_memory_bank:
                     loss = memory_bank.criterion(feats, labels)
                 else:
-                    loss = criterion(feats, logits, labels)
+                    loss = criterion(feats, logits, labels, epoch)
 
             
             scaler.scale(loss).backward()
