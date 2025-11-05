@@ -201,7 +201,7 @@ def freeze_model(model, phase):
         for param in model.fc.parameters(): param.requires_grad = False
         for param in model.bn.parameters(): param.requires_grad = False
 
-def unfreeze_backbone(model, phase):
+def unfreeze_backbone(model, phase, optimizer):
 
     new_params = []
 
@@ -726,7 +726,7 @@ def unfreeze_backbone_attemp(model, optimizer, curr_epoch, cfg):
         return
 
     idx_cfg = cfg["uepoch"].index(curr_epoch)
-    unfreeze_backbone(model, cfg["uphase"][idx_cfg])
+    unfreeze_backbone(model, cfg["uphase"][idx_cfg], optimizer)
     
     if cfg["ulr"] is None:
         return
