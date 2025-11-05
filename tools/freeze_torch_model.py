@@ -703,7 +703,7 @@ def unfreeze_backbone_attemp(model, optimizer, curr_epoch, cfg):
     if cfg["ulr"] is None:
         return
 
-    if cfg["ulr"][idx_cfg] is None:
+    if "None" == cfg["ulr"][idx_cfg]:
         return
 
     for param_group in optimizer.param_groups:
@@ -754,6 +754,12 @@ class Criterion(torch.nn.Module):
 def train(config_file, mode="train", experiment_name="default"):
     config = load_config(config_file)
     init_seed(config)
+    if config["unfreeze_backbone"]["ulr"] is None:
+        print("no config ulr")
+    else:
+        print(config["unfreeze_backbone"]["ulr"], type(config["unfreeze_backbone"]["ulr"][0]))
+
+    exit(1)
 
     ending_epoch = config['training']['epochs']
     try:
