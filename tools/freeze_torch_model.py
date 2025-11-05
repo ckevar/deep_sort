@@ -729,16 +729,16 @@ class Criterion(torch.nn.Module):
             self.mode = 0
 
         elif "tripletloss" == mode:
-            self.criterion[1] = TripletLoss(margin=0.7)
+            self.criterion[1] = TripletLoss(margin=1)
             self.mode = 1
 
         elif "both" == mode:
             self.criterion[0] = nn.CrossEntropyLoss()
-            self.criterion[1] = TripletLoss(margin=0.7)
+            self.criterion[1] = TripletLoss(margin=1)
             self.mode = 2
             self.a, self.b = 0.15, 1.0
         else:
-            self.criterion[1] = TripletLoss(margin=0.7)
+            self.criterion[1] = TripletLoss(margin=1)
             self.mode = 1
 
     def forward(self, feats, logits, labels, epoch):
