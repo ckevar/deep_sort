@@ -728,6 +728,7 @@ class Criterion(torch.nn.Module):
             self.criterion[0] = nn.CrossEntropyLoss()
             self.criterion[1] = TripletLoss(margin=0.2)
             self.mode = 2
+            self.a, self.b = 0.15, 1.0
         else:
             self.criterion[1] = TripletLoss(margin=0.2)
             self.mode = 1
@@ -741,12 +742,11 @@ class Criterion(torch.nn.Module):
             return self.criterion[1](feats, labels)
 
         elif 2 == self.mode: # Cross entropy + Triplet Loss
-            alpha = 0.15
-            if epoch > 46: alpha = 0.30
+            if 43 == epoch: self.a, self.b = 1.0, 6.6
 
             lossCE = self.criterion[0](logits, labels)
             lossTP = self.criterion[1](feats, labels)
-            loss = alpha * lossCE + lossTP
+            loss = self.a * lossCE + self.b * lossTP
             return loss
         else:
             raise ValueError("Something went wrong during loss calculation. Make sure the criterios are correctly set in the configuration.")
