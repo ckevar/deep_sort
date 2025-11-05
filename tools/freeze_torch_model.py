@@ -742,8 +742,7 @@ class Criterion(torch.nn.Module):
 
         elif 2 == self.mode: # Cross entropy + Triplet Loss
             alpha = 0.15
-            if epoch > 46:
-                alpha = 0.30
+            if epoch > 46: alpha = 0.30
 
             lossCE = self.criterion[0](logits, labels)
             lossTP = self.criterion[1](feats, labels)
