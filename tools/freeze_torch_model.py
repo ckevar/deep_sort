@@ -754,12 +754,6 @@ class Criterion(torch.nn.Module):
 def train(config_file, mode="train", experiment_name="default"):
     config = load_config(config_file)
     init_seed(config)
-    if config["unfreeze_backbone"]["ulr"] is None:
-        print("no config ulr")
-    else:
-        print(config["unfreeze_backbone"]["ulr"], type(config["unfreeze_backbone"]["ulr"][0]))
-
-    exit(1)
 
     ending_epoch = config['training']['epochs']
     try:
