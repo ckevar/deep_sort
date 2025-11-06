@@ -736,11 +736,14 @@ class Criterion(torch.nn.Module):
             self.criterion[0] = nn.CrossEntropyLoss()
             self.criterion[1] = TripletLoss(margin=cfg["triplet_margin"])
             self.mode = 2
-            self.alpha, self.beta = 0.15, 1.0
-            if not (cfg["alpha"] is None):
+            try:
                 self.alpha = cfg["alpha"]
-            if not (cfg["beta"] is None):
-                self.beta =  cfg["beta"]
+            except:
+                self.alpha = 0.15
+            try:
+                self.alpha = cfg["beta"]
+            except:
+                self.beta =  1.0
               
         else:
             self.criterion[1] = TripletLoss(margin=0.2)
