@@ -626,9 +626,7 @@ class TripletLoss(torch.nn.Module):
                 loss += triplet_loss
                 triplets += 1
 
-        # Avoid division by zero if no active triplets were found
         if triplets == 0:
-            # Return a zero tensor that still requires gradients
             return torch.tensor(0.0, requires_grad=True, device=feats.device)
 
         return loss / triplets
@@ -708,14 +706,16 @@ class Criterion(torch.nn.Module):
         if mode in ("tripletloss", "both"):
             self.criterion[1] = TripletLoss(margin=cfg["triplet_margin"])
             self.mode = 1
+        else:
+            raise ValueError("`criterion` is required in the configuration file. It could be `crossentropy` or `tripletloss`.")
 
         if "both" == mode:
             self.mode = 2
             self.alpha = cfg.get("alpha", 0.15)
             self.beta = cfg.get("beta", 1.0)
-              
-        else:
-            raise ValueError("`criterion` is required in the configuration file. It could be `crossentropy` or `tripletloss`.")
+
+            #self.alpha = cfg.get("alpha", [0.15])
+            #self.beta = cfg.get("beta", [1.0])
 
     def forward(self, feats, logits, labels, epoch):
 
@@ -727,7 +727,7 @@ class Criterion(torch.nn.Module):
 
         elif 2 == self.mode: # Cross entropy + Triplet Loss
             #if 43 == epoch: self.alpha, self.beta = 1.0, 6.6
-            if 50 == epoch: self.mode = 1 # triplet loss only
+            #if 50 == epoch: self.mode = 1 # triplet loss only
 
             lossCE = self.criterion[0](logits, labels)
             lossTP = self.criterion[1](feats, labels)
