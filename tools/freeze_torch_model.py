@@ -715,6 +715,7 @@ class Criterion(torch.nn.Module):
             self.beta = cfg.get("beta", 1.0)
               
         else:
+            raise ValueError("Criterion is required, it could be `crossentropy` or `tripletloss`.")
             self.criterion[1] = TripletLoss(margin=0.2)
             cfg["triplet_margin"] = 0.2
             self.mode = 1
