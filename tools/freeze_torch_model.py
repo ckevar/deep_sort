@@ -697,6 +697,7 @@ class Criterion(torch.nn.Module):
         super().__init__()
         mode = cfg["criterion"]
 
+        self.mode = None
         self.criterion = [None, None]
 
         if mode in ("crossentropy", "both"):
@@ -706,13 +707,14 @@ class Criterion(torch.nn.Module):
         if mode in ("tripletloss", "both"):
             self.criterion[1] = TripletLoss(margin=cfg["triplet_margin"])
             self.mode = 1
-        else:
-            raise ValueError("`criterion` is required in the configuration file. It could be `crossentropy` or `tripletloss`.")
 
         if "both" == mode:
             self.mode = 2
             self.alpha = cfg.get("alpha", 0.15)
             self.beta = cfg.get("beta", 1.0)
+
+        if None == self.mode:
+            raise ValueError("`criterion` is required in configuration file, `tripletloss`, `crossentropy`, `both`.")
 
             #self.alpha = cfg.get("alpha", [0.15])
             #self.beta = cfg.get("beta", [1.0])
