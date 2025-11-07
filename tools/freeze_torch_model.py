@@ -242,16 +242,12 @@ def unfreeze_backbone(model, phase):
             param.requires_grad = True
 
 def init_lr(cfg):
-    try:
-        lr_scheduling = cfg['training']['lr_scheduling']
-    except:
-        lr_scheduling = False
+    lr_scheduling = cfg["training"].get("lr_scheduling", False)
+    if not lr_scheduling:
         cfg['training']['lr_scheduling'] = False
 
-    try:
-        lr_schedule_at = cfg['training']['lr_schedule_at']
-    except:
-        lr_schedule_at = None
+    lr_schedule_at = cfg['training'].get("lr_schedule_at", None)
+    if None == lr_schedule_at:
         cfg['training']['lr_schedule_at'] = None
 
     lr = float(cfg['training']['lr'])
@@ -570,18 +566,6 @@ class MemoryBank(object):
         num_positives[num_positives == 0] = 1.0
         loss = (nll_loss_per_sample / num_positives).mean()
 
-
-        """
-        targets = torch.zeros_like(labels)
-        for i, lbl in enumerate(labels):
-            pos_indices = (bank_labels == lbl).nonzero(as_tuple=True)[0]
-
-            if len(pos_indices) > 0:
-                targets[i] = pos_indices[0]
-
-        loss = self.loss_fn(logits, targets)
-        """
-        
         self.__update__(feats, labels)
 
         return loss
@@ -681,28 +665,21 @@ def fix_seed(seed, determinism_level):
         torch.backends.cudnn.benchmark = False
 
 def init_seed(cfg):
-    try:
-        seed = cfg['training']['seed']
-        print("seed", seed)
-        if seed < 0:
-            seed = random.randint(0, 2**32 - 1) 
-            print("seed:", seed)
-    except:
-        seed = random.randint(0, 2**32 - 1)
-        cfg["training"]["seed"] = seed
-        print("seed:", seed)
+    seed = cfg['training'].get('seed', -1)
+    if seed < 0:
+        seed = random.randint(0, 2**32 - 1) 
 
-    try:
-        determinism_level = cfg['training']['determinism_level']
-    except:
-        determinism_level = 0
+    print("seed:", seed)
+
+    determinism_level = cfg['training'].get("determinism_level", 0)
+    if 0 == determinism_level:
         cfg["training"]["determinism_level"] = determinism_level
 
     fix_seed(seed, determinism_level)
 
 def unfreeze_backbone_attemp(model, optimizer, curr_epoch, cfg):
 
-    if not curr_epoch in cfg["uepoch"]:
+    if not (curr_epoch in cfg["uepoch"]):
         return
 
     idx_cfg = cfg["uepoch"].index(curr_epoch)
@@ -724,26 +701,18 @@ class Criterion(torch.nn.Module):
 
         self.criterion = [None, None]
 
-        if "crossentropy" == mode:
+        if mode in ("crossentropy", "both"):
             self.criterion[0] = nn.CrossEntropyLoss()
             self.mode = 0
 
-        elif "tripletloss" == mode:
+        if mode in ("tripletloss", "both")
             self.criterion[1] = TripletLoss(margin=cfg["triplet_margin"])
             self.mode = 1
 
-        elif "both" == mode:
-            self.criterion[0] = nn.CrossEntropyLoss()
-            self.criterion[1] = TripletLoss(margin=cfg["triplet_margin"])
+        if "both" == mode:
             self.mode = 2
-            try:
-                self.alpha = cfg["alpha"]
-            except:
-                self.alpha = 0.15
-            try:
-                self.alpha = cfg["beta"]
-            except:
-                self.beta =  1.0
+            self.alpha = cfg.get("alpha", 0.15)
+            self.beta = cfg.get("beta", 1.0)
               
         else:
             self.criterion[1] = TripletLoss(margin=0.2)
@@ -760,7 +729,7 @@ class Criterion(torch.nn.Module):
 
         elif 2 == self.mode: # Cross entropy + Triplet Loss
             #if 43 == epoch: self.alpha, self.beta = 1.0, 6.6
-            #if 43 == epoch: self.mode = 1 # triplet loss only
+            if 50 == epoch: self.mode = 1 # triplet loss only
 
             lossCE = self.criterion[0](logits, labels)
             lossTP = self.criterion[1](feats, labels)
@@ -774,10 +743,8 @@ def train(config_file, mode="train", experiment_name="default"):
     init_seed(config)
 
     ending_epoch = config['training']['epochs']
-    try:
-        use_memory_bank = config['training']['memory_bank']
-    except:
-        use_memory_bank = False
+    use_memory_bank = config["training"].get("memory_bank", False)
+    if not use_memory_bank:
         config['training']["memory_bank"] = False
 
     # Learning Rate related
