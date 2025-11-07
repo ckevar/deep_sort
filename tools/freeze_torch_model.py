@@ -705,7 +705,7 @@ class Criterion(torch.nn.Module):
             self.criterion[0] = nn.CrossEntropyLoss()
             self.mode = 0
 
-        if mode in ("tripletloss", "both")
+        if mode in ("tripletloss", "both"):
             self.criterion[1] = TripletLoss(margin=cfg["triplet_margin"])
             self.mode = 1
 
