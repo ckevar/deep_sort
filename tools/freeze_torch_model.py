@@ -242,13 +242,31 @@ def unfreeze_backbone(model, phase):
             param.requires_grad = True
 
 def init_lr(cfg):
-    lr_scheduling = cfg["training"].get("lr_scheduling", False)
-    if not lr_scheduling:
-        cfg['training']['lr_scheduling'] = False
 
+    # Dividends of the learning rate
+    lr_scheduling = cfg["training"].get("lr_scheduling", None)
+    if None == lr_scheduling:
+        cfg['training']['lr_scheduling'] = None
+
+    elif isinstance(lr_scheduling, list):
+        lr_scheduling = [float(l) for l in lr_scheduling]
+
+    elif isinstance(lr_scheduling, str):
+        lr_scheduling = [float(lr_scheduling)]
+
+
+    # when to change the learning rate
     lr_schedule_at = cfg['training'].get("lr_schedule_at", None)
     if None == lr_schedule_at:
         cfg['training']['lr_schedule_at'] = None
+
+    elif isinstance(lr_schedule_at, list):
+        if len(lr_schedule_at) != len(lr_scheduling):
+            raise ValueError("lr scheduling and lr_schedule_have to be the same length.")
+    else:
+        if None == lr_scheduling:
+            raise ValueError("new learning rate or lr dividend is missing.")
+        lr_schedule_at = [int(lr_schedule_at)]
 
     lr = float(cfg['training']['lr'])
 
@@ -741,6 +759,15 @@ class Criterion(torch.nn.Module):
         else:
             raise ValueError("Something went wrong during loss calculation. Make sure the criterios are correctly set in the configuration.")
 
+def update_lr(opt, epoch, lr_scheduling, lr_schedule_at):
+    if not (epoch in lr_schedule_at):
+        return
+    idx = lr_schedule_at.index(epoch)
+    
+    lr_coeff = lr_scheduling[idx]
+    for param_group in opt.param_groups:
+        param_group['lr'] *= lr_coeff
+
 def train(config_file, mode="train", experiment_name="default"):
     config = load_config(config_file)
     init_seed(config)
@@ -750,10 +777,8 @@ def train(config_file, mode="train", experiment_name="default"):
     if not use_memory_bank:
         config['training']["memory_bank"] = False
 
-    # Learning Rate related
+    # Init Learning Rate
     lr, lr_scheduling, lr_schedule_at = init_lr(config)
-    if lr_schedule_at:
-        print(f"LR Scheduled @ {lr_schedule_at}")
 
     # Directories, Filenames Model and Metrics
     init_logs(config, experiment_name)
@@ -802,6 +827,9 @@ def train(config_file, mode="train", experiment_name="default"):
                                          best_mAP)
 
         # Learning Rate Sheduling
+        if lr_schedule_at != None: 
+            update_lr(optimizer, epoch, lr_scheduling, lr_schedule_at)
+
         if lr_scheduling and lr_schedule_at == epoch:
             for param_group in optimizer.param_groups:
                 param_group['lr'] *= 0.1
