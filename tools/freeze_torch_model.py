@@ -804,7 +804,7 @@ def train(config_file, mode="train", experiment_name="default"):
         # Learning Rate Sheduling
         if lr_scheduling and lr_schedule_at == epoch:
             for param_group in optimizer.param_groups:
-                param_group['lr'] *= 0.3
+                param_group['lr'] *= 0.1
 
         for images, labels, _ in tqdm(train_loader):
 
