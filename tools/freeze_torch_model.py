@@ -698,6 +698,7 @@ class Criterion(torch.nn.Module):
         mode = cfg["criterion"]
 
         self.mode = None
+        self.epochs = None
         self.criterion = [None, None]
 
         if mode in ("crossentropy", "both"):
@@ -713,13 +714,15 @@ class Criterion(torch.nn.Module):
             self.alpha = cfg.get("alpha", 0.15)
             self.beta = cfg.get("beta", 1.0)
 
-        if None == self.mode:
-            raise ValueError("`criterion` is required in configuration file, `tripletloss`, `crossentropy`, `both`.")
-
             #self.alpha = cfg.get("alpha", [0.15])
             #self.beta = cfg.get("beta", [1.0])
 
+        if None == self.mode:
+            raise ValueError("`criterion` is required in configuration file, `tripletloss`, `crossentropy`, `both`.")
+
     def forward(self, feats, logits, labels, epoch):
+
+        if epoch in self.epochs:
 
         if 0 == self.mode: # cross entropy alone
             return self.criterion[0](logits, labels)
@@ -801,7 +804,7 @@ def train(config_file, mode="train", experiment_name="default"):
         # Learning Rate Sheduling
         if lr_scheduling and lr_schedule_at == epoch:
             for param_group in optimizer.param_groups:
-                param_group['lr'] *= 0.2
+                param_group['lr'] *= 0.3
 
         for images, labels, _ in tqdm(train_loader):
 

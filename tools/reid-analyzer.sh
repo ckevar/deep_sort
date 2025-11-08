@@ -367,6 +367,7 @@ elif [ "plot" = "$TASK" ]; then
   plot "$DATASET_ID" "$EXP_ID" "$@"
 
 elif [ "plotc" = "$TASK" ]; then
+  echo "$EXP_ID"
   plotc "$EXP_ID" "$@"
 
 # BLACK LIST: This are experiments that are not plotten for every category
