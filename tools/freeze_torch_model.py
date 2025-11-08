@@ -722,7 +722,7 @@ class Criterion(torch.nn.Module):
 
     def forward(self, feats, logits, labels, epoch):
 
-        if epoch in self.epochs:
+        #if epoch in self.epochs:
 
         if 0 == self.mode: # cross entropy alone
             return self.criterion[0](logits, labels)
