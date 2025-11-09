@@ -1,6 +1,6 @@
-from .freeze_torch_model import MarsSmall128
-from .freeze_torch_model import load_torchWRN_model
-from .generate_detections import extract_image_patch
+from freeze_torch_model import MarsSmall128
+from freeze_torch_model import load_torchWRN_model
+from generate_detections import extract_image_patch
 
 import numpy as np
 import torch
