@@ -808,7 +808,7 @@ def train(config_file, mode="train", experiment_name="default"):
 
         # - Learning Rate
         if lr_schedule_at is not None: 
-            optimizer = attempt_update_lr(model, optimizer, epoch, lr_scheduling, lr_schedule_at, restart=True)
+            attempt_update_lr(model, optimizer, epoch, lr_scheduling, lr_schedule_at, restart=True)
 
         # - Post/Pre Data Augmentation
         attempt_update_dataAugmentation(tdataset, epoch, config["training"])
