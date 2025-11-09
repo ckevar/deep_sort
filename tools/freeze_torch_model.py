@@ -633,7 +633,6 @@ class TripletLoss(torch.nn.Module):
             if pos_dists.numel() == 0:
                 continue
 
-
             # Find HARDEST pairs, not easiest
             hardest_pos = pos_dists.max() # Farthest positive
             hardest_neg = neg_dists.min() # Closest negative
@@ -680,7 +679,8 @@ class Criterion(torch.nn.Module):
 
     def forward(self, feats, logits, labels, epoch):
 
-        #if epoch in self.epochs:
+        if 57 == epoch:
+            self.mode = 1
 
         if 0 == self.mode: # cross entropy alone
             return self.criterion[0](logits, labels)
