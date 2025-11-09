@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-"""# A· Wide Residual Network"""
 
 import torch
 import torch.nn as nn
@@ -18,6 +16,8 @@ from wrntorch.utils import (
     )
 
 from wrntorch.dataset import ReIDListDataset
+
+"""# Model """
 
 class Conv2Same(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, bias=True):
@@ -142,7 +142,7 @@ class MarsSmall128(nn.Module):
         self.fc = nn.Linear(16384, 128)
         self.bn = nn.BatchNorm1d(128, eps=1e-3, momentum=0.999)
 
-        # Optional classifier head: porint of failure #FAIL #Fail #failure #fail
+        # Optional classifier head: print of failure #FAIL #Fail #failure #fail
         # I have ran many experiments and im not sure which model or when a 
         # certain is using a linear classifier or a softmax classifier, like the
         # one for the deepSORT paper.
@@ -175,106 +175,8 @@ class MarsSmall128(nn.Module):
             return x, self.classifier(x)
         return x
 
-def freeze_model(model, phase):
-    if phase >= 2: # Freeze just shallow layers
-        for param in model.conv1.parameters(): param.requires_grad = False
-        for param in model.conv1_bn.parameters(): param.requires_grad = False
-        for param in model.conv2.parameters(): param.requires_grad = False
-        for param in model.conv2_bn.parameters(): param.requires_grad = False
-  
-    if phase >= 3:
-        for param in model.pool.parameters(): param.requires_grad = False
-        for param in model.res1.parameters(): param.requires_grad = False
-  
-    if phase >= 4: # Freeze half feature descriptor
-        for param in model.res2.parameters(): param.requires_grad = False
-        for param in model.res3.parameters(): param.requires_grad = False
-  
-    if phase >= 5: # Freeze just before the last feature map
-        for param in model.res4.parameters(): param.requires_grad = False
-        for param in model.res5.parameters(): param.requires_grad = False
-  
-    if phase >= 6: # freeze the entire backbone
-        for param in model.res6.parameters(): param.requires_grad = False # Last feature map
-  
-    if 7 == phase:
-        for param in model.fc.parameters(): param.requires_grad = False
-        for param in model.bn.parameters(): param.requires_grad = False
 
-def unfreeze_backbone(model, phase):
-
-    if 6 == phase:
-        for param in model.conv1.parameters(): 
-            param.requires_grad = True
-        for param in model.conv1_bn.parameters(): 
-            param.requires_grad = True
-        for param in model.conv2.parameters(): 
-            param.requires_grad = True
-        for param in model.conv2_bn.parameters(): 
-            param.requires_grad = True
-
-    if phase == 5:
-        for param in model.pool.parameters(): 
-            param.requires_grad = True
-        for param in model.res1.parameters(): 
-            param.requires_grad = True
-
-    if phase == 4:
-        for param in model.res2.parameters(): 
-            param.requires_grad = True
-        for param in model.res3.parameters(): 
-            param.requires_grad = True
-
-    if phase == 3:
-        for param in model.res4.parameters(): 
-            param.requires_grad = True
-        for param in model.res5.parameters(): 
-            param.requires_grad = True
-
-    if phase == 2:
-        for param in model.res6.parameters(): 
-            param.requires_grad = True
-    
-    if phase == 1:
-        for param in model.fc.parameters(): 
-            param.requires_grad = True
-        for param in model.bn.parameters(): 
-            param.requires_grad = True
-
-def init_lr(cfg):
-
-    # Dividends of the learning rate
-    lr_scheduling = cfg["training"].get("lr_scheduling", None)
-    if None == lr_scheduling:
-        cfg['training']['lr_scheduling'] = None
-
-    elif isinstance(lr_scheduling, list):
-        lr_scheduling = [float(l) for l in lr_scheduling]
-
-    elif isinstance(lr_scheduling, str):
-        lr_scheduling = [float(lr_scheduling)]
-
-
-    # when to change the learning rate
-    lr_schedule_at = cfg['training'].get("lr_schedule_at", None)
-    if None == lr_schedule_at:
-        cfg['training']['lr_schedule_at'] = None
-
-    elif isinstance(lr_schedule_at, list):
-        if len(lr_schedule_at) != len(lr_scheduling):
-            raise ValueError("lr scheduling and lr_schedule_have to be the same length.")
-    else:
-        if None == lr_scheduling:
-            raise ValueError("new learning rate or lr dividend is missing.")
-        lr_schedule_at = [int(lr_schedule_at)]
-
-    lr = float(cfg['training']['lr'])
-
-    return lr, lr_scheduling, lr_schedule_at
-
-
-from sklearn.metrics import average_precision_score
-import numpy as np
+"""# Evaluation Utils """
 
 def extract_features(model, loader, feat_dim, num_cams=1):
     model.eval()
@@ -302,6 +204,9 @@ def extract_features(model, loader, feat_dim, num_cams=1):
             ptr += b
 
     return feats, labels, camids
+
+from sklearn.metrics import average_precision_score
+import numpy as np
 
 def legacy_compute_cmc_map(query_feats, query_ids, query_cams,
                     gallery_feats, gallery_ids, gallery_cams):
@@ -352,7 +257,6 @@ def legacy_compute_cmc_map(query_feats, query_ids, query_cams,
 
     return cmc, mAP
 
-import time
 def compute_cmc_map_in_gpu(query_feats,
                            query_ids,
                            query_cams,
@@ -464,9 +368,99 @@ def evaluate_mAP_CMCD(config, model, feat_dims):
       batch_size=512000
     )
 
-"""## 4.3· Training Utils"""
+"""# Training Utils"""
+
+"""## training utils | Freeze/Unfreeze functions """
+def __set_requires_grad(modules:list, unfreeze=None):
+    if None == unfreeze:
+        raise ValueError("Freeze parameters needs to be set.")
+
+    for m in modules:
+        for p in m.parameters():
+            p.requires_grad = unfreeze
+
+def freeze_model(model, phase):
+
+    if phase >= 2: # Freeze just shallow layers
+        __set_requires_grad([model.conv1, model.conv1_bn,
+                             model.conv2, model.conv2_bn],
+                            freeze=False)
+
+    if phase >= 3:
+        __set_requires_grad([model.pool, model.res1], unfreeze=False)
+  
+    if phase >= 4: # Freeze half feature descriptor
+        __set_requires_grad([model.res2, model.res3], unfreeze=False)
+  
+    if phase >= 5: # Freeze just before the last feature map
+        __set_requires_grad([model.res4, model.res5], unfreeze=False)
+  
+    if phase >= 6: # freeze the entire backbone
+        __set_requires_grad([model.res6], unfreeze=False) # Last feature map
+  
+    if 7 == phase:
+        __set_requires_grad([model.fc, model.bn], unfreeze=False)
+
+def unfreeze_backbone(model, phase):
+
+    if 6 == phase:
+        __set_requires_grad([model.conv1, model.conv1_bn,
+                             model.conv2, model.conv2_bn],
+                            unfreeze=True)
+
+    if phase == 5:
+        __set_requires_grad([model.pool, model.res1], unfreeze=True)
+
+    if phase == 4:
+        __set_requires_grad([model.res2, model.res3], unfreeze=True)
+
+    if phase == 3:
+        __set_requires_grad([model.res4, model.res5], unfreeze=True)
+
+    if phase == 2:
+        __set_requires_grad([model.res6], unfreeze=True)
+    
+    if phase == 1:
+        __set_requires_grad([model.fc, model.bn], unfreeze=True)
+
+"""## training utils | Initialisers """
+def init_lr(cfg):
+
+    # Coefficients of the learning rate
+    lr_scheduling = cfg["training"].get("lr_scheduling", None)
+    if None == lr_scheduling:
+        cfg['training']['lr_scheduling'] = None
+
+    elif isinstance(lr_scheduling, list):
+        lr_scheduling = [float(l) for l in lr_scheduling]
+
+    elif isinstance(lr_scheduling, str):
+        lr_scheduling = [float(lr_scheduling)]
+
+
+    # when to change the learning rate
+    lr_schedule_at = cfg['training'].get("lr_schedule_at", None)
+    if None == lr_schedule_at:
+        cfg['training']['lr_schedule_at'] = None
+
+    elif isinstance(lr_schedule_at, list):
+        if len(lr_schedule_at) != len(lr_scheduling):
+            raise ValueError("lr scheduling and lr_schedule_have to be the same length.")
+    else:
+        if None == lr_scheduling:
+            raise ValueError("new learning rate or lr dividend is missing.")
+        lr_schedule_at = [int(lr_schedule_at)]
+
+    # Initial learning rate o reference learning rate
+    lr = float(cfg['training']['lr'])
+
+    return lr, lr_scheduling, lr_schedule_at
 
 def init_dataset(config):
+
+    pre_transform = transforms.Compose([
+        transforms.RandomHorizontalFlip(),
+    ])
 
     transform = transforms.Compose([
         transforms.RandomResizedCrop(tuple(config['resize'])),  # random crop & resize to your input size
@@ -475,12 +469,18 @@ def init_dataset(config):
         transforms.Lambda(lambda x: x * 255.0),
     ])
 
+    post_transform = transforms.Compose([
+        transforms.RandomErasing(p=0.1)
+    ])
+
     root_dir = config["root_dir"]
 
     train_dataset = ReIDListDataset(
         root_dir=root_dir,
         list_path=f"{root_dir}/{config['train']}",
-        transform=transform
+        transform=transform,
+        pre_transform=pre_transform,
+        post_transform=post_transform,
     )
 
     train_batch_sz = config['training']['p'] * config['training']['k']
@@ -553,9 +553,7 @@ class PKSampler(Sampler):
     def __len__(self):
         return len(self.data_source)
 
-"""## 4.4· Training"""
 
-from tqdm import tqdm
 
 
 class MemoryBank(object):
@@ -768,6 +766,8 @@ def update_lr(opt, epoch, lr_scheduling, lr_schedule_at):
     for param_group in opt.param_groups:
         param_group['lr'] *= lr_coeff
 
+"""# Train """
+from tqdm import tqdm
 def train(config_file, mode="train", experiment_name="default"):
     config = load_config(config_file)
     init_seed(config)
