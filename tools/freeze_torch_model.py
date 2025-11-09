@@ -370,11 +370,8 @@ def evaluate_mAP_CMCD(config, model, feat_dims):
 
 """# Training Utils"""
 
-"""## training utils | Freeze/Unfreeze functions """
-def __set_requires_grad(modules:list, unfreeze=None):
-    if None == unfreeze:
-        raise ValueError("Freeze parameters needs to be set.")
-
+"""## training utils | Freeze/Unfreeze Functions """
+def __set_requires_grad(modules:list, unfreeze:bool):
     for m in modules:
         for p in m.parameters():
             p.requires_grad = unfreeze
@@ -384,84 +381,81 @@ def freeze_model(model, phase):
     if phase >= 2: # Freeze just shallow layers
         __set_requires_grad([model.conv1, model.conv1_bn,
                              model.conv2, model.conv2_bn],
-                            freeze=False)
+                            False)
 
     if phase >= 3:
-        __set_requires_grad([model.pool, model.res1], unfreeze=False)
+        __set_requires_grad([model.pool, model.res1], False)
   
     if phase >= 4: # Freeze half feature descriptor
-        __set_requires_grad([model.res2, model.res3], unfreeze=False)
+        __set_requires_grad([model.res2, model.res3], False)
   
     if phase >= 5: # Freeze just before the last feature map
-        __set_requires_grad([model.res4, model.res5], unfreeze=False)
+        __set_requires_grad([model.res4, model.res5], False)
   
     if phase >= 6: # freeze the entire backbone
-        __set_requires_grad([model.res6], unfreeze=False) # Last feature map
+        __set_requires_grad([model.res6], False) # Last feature map
   
     if 7 == phase:
-        __set_requires_grad([model.fc, model.bn], unfreeze=False)
+        __set_requires_grad([model.fc, model.bn], False)
 
 def unfreeze_backbone(model, phase):
 
     if 6 == phase:
         __set_requires_grad([model.conv1, model.conv1_bn,
                              model.conv2, model.conv2_bn],
-                            unfreeze=True)
+                            True)
 
     if phase == 5:
-        __set_requires_grad([model.pool, model.res1], unfreeze=True)
+        __set_requires_grad([model.pool, model.res1], True)
 
     if phase == 4:
-        __set_requires_grad([model.res2, model.res3], unfreeze=True)
+        __set_requires_grad([model.res2, model.res3], True)
 
     if phase == 3:
-        __set_requires_grad([model.res4, model.res5], unfreeze=True)
+        __set_requires_grad([model.res4, model.res5], True)
 
     if phase == 2:
-        __set_requires_grad([model.res6], unfreeze=True)
+        __set_requires_grad([model.res6], True)
     
     if phase == 1:
-        __set_requires_grad([model.fc, model.bn], unfreeze=True)
+        __set_requires_grad([model.fc, model.bn], True)
 
 """## training utils | Initialisers """
-def init_lr(cfg):
+def init_LearningRate(cfg):
+
+    # Initial learning rate o reference learning rate
+    lr = float(cfg['training']['lr'])
 
     # Coefficients of the learning rate
     lr_scheduling = cfg["training"].get("lr_scheduling", None)
-    if None == lr_scheduling:
+    if lr_scheduling is None:
         cfg['training']['lr_scheduling'] = None
 
     elif isinstance(lr_scheduling, list):
         lr_scheduling = [float(l) for l in lr_scheduling]
 
     elif isinstance(lr_scheduling, str):
-        lr_scheduling = [float(lr_scheduling)]
+        if "None" == lr_scheduling:
+            return lr, None, None
 
+        lr_scheduling = [float(lr_scheduling)]
 
     # when to change the learning rate
     lr_schedule_at = cfg['training'].get("lr_schedule_at", None)
-    if None == lr_schedule_at:
+    if lr_schedule_at is None:
         cfg['training']['lr_schedule_at'] = None
 
     elif isinstance(lr_schedule_at, list):
         if len(lr_schedule_at) != len(lr_scheduling):
             raise ValueError("lr scheduling and lr_schedule_have to be the same length.")
     else:
-        if None == lr_scheduling:
+        if lr_scheduling is None:
             raise ValueError("new learning rate or lr dividend is missing.")
         lr_schedule_at = [int(lr_schedule_at)]
-
-    # Initial learning rate o reference learning rate
-    lr = float(cfg['training']['lr'])
 
     return lr, lr_scheduling, lr_schedule_at
 
 def init_dataset(config):
-
-    pre_transform = transforms.Compose([
-        transforms.RandomHorizontalFlip(),
-    ])
-
     transform = transforms.Compose([
         transforms.RandomResizedCrop(tuple(config['resize'])),  # random crop & resize to your input size
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
@@ -469,9 +463,23 @@ def init_dataset(config):
         transforms.Lambda(lambda x: x * 255.0),
     ])
 
+    pre_transform = transforms.Compose([
+        transforms.RandomHorizontalFlip(),
+    ])
+
     post_transform = transforms.Compose([
         transforms.RandomErasing(p=0.1)
     ])
+
+    pre_trasform_at = config["training"].get("pre_trasform_at", None)
+    if pre_trasform_at is None: 
+        config["training"]["pre_trasform_at"] = pre_trasform_at
+        pre_transform = None
+
+    post_trasform_at = config["training"].get("post_trasform_at", None)
+    if post_trasform_at is None: 
+        config["training"]["post_trasform_at"] = post_trasform_at
+        post_transform = None
 
     root_dir = config["root_dir"]
 
@@ -497,7 +505,7 @@ def init_dataset(config):
 
     config["num_classes"] = len(train_dataset.classes)
 
-    return config["num_classes"], train_loader
+    return config["num_classes"], train_loader, train_dataset
 
 def init_model_to_train(config, mode, model, optimizer, scaler):
     if "resume" == mode:
@@ -519,8 +527,43 @@ def init_model_to_train(config, mode, model, optimizer, scaler):
         model.eval()
         return 0, 0
 
-    else:
-        raise ValueError(f"\n    Unknown mode: {mode}. They can be `train` (from scratch), `resume` (model under the metrics dir), `from_model` (finetune)")
+    raise ValueError(f"\n    Unknown mode: {mode}. They can be `train` (from scratch), `resume` (model under the metrics dir), `from_model` (finetune)")
+
+def fix_seed(seed, determinism_level):
+    """
+    seed: seed to place in every random module
+    determinism_level: there are three levels of determinsm:
+    - 0: no determisn at all, everything is random, so it means seed will be ignored.
+    - 1: only placing the seed
+    - 2: placing seed plus making torch deterministic
+    """
+
+    if determinism_level >= 1:
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # Upon multiple GPUs
+
+    if 2 == determinism_level:
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+def init_seed(cfg):
+    seed = cfg['training'].get('seed', -1)
+    if seed < 0:
+        seed = random.randint(0, 2**32 - 1) 
+
+    print("seed:", seed)
+
+    determinism_level = cfg['training'].get("determinism_level", 0)
+    if 0 == determinism_level:
+        cfg["training"]["determinism_level"] = determinism_level
+
+    fix_seed(seed, determinism_level)
+
+
+"""## training utils | Batch Sampler """
 
 class PKSampler(Sampler):
     def __init__(self, data_source, P, K):
@@ -554,47 +597,7 @@ class PKSampler(Sampler):
         return len(self.data_source)
 
 
-
-
-class MemoryBank(object):
-    def __init__(self, loss_fn, membank_sz=None, feat_sz=None, amp=False):
-        self.loss_fn = loss_fn
-        self.ptr = 0
-        self.size = membank_sz
-
-        dtype = torch.float16 if amp else torch.float
-
-        self.bank = torch.zeros(membank_sz, feat_sz, dtype=dtype)
-        self.labels = torch.zeros(membank_sz, dtype=torch.long)
-        self.temp = 0.7
-
-    def criterion(self, feats, labels):
-
-        bank = self.bank.to("cuda")
-        bank_labels = self.labels.to("cuda")
-
-        logits = torch.matmul(feats, bank.T) / self.temp
-
-        targets = (labels.unsqueeze(1) == bank_labels.unsqueeze(0)).float()
-        log_probs = torch.nn.functional.log_softmax(logits, dim=1)
-        nll_loss_per_sample = -(log_probs * targets).sum(dim=1)
-        num_positives = targets.sum(dim=1)
-        num_positives[num_positives == 0] = 1.0
-        loss = (nll_loss_per_sample / num_positives).mean()
-
-        self.__update__(feats, labels)
-
-        return loss
-
-    @torch.no_grad()
-    def __update__(self, outputs, labels):
-        n = outputs.shape[0]
-        if (self.ptr + n) > self.size:
-            n = self.size - self.ptr
-        
-        self.bank[self.ptr:self.ptr + n] = outputs[:n]
-        self.labels[self.ptr:self.ptr + n] = labels[:n]
-        self.ptr = (self.ptr + n) % self.size
+"""## training utils | Losses """
 
 class TripletLoss(torch.nn.Module):
     def __init__(self, margin=0.2):
@@ -647,67 +650,6 @@ class TripletLoss(torch.nn.Module):
 
         return loss / triplets
 
-def init_memory_bank(ft_sz, criterion, cfg):
-   batch_sz = cfg['training']['p'] * cfg['training']['k']
-   membank_sz = cfg['training']['memory_bank_sz']
-   membank_sz = membank_sz * batch_sz
-
-   mem_bank = MemoryBank(criterion, 
-                         membank_sz=membank_sz, 
-                         feat_sz=ft_sz,
-                         amp=True)
-   return mem_bank
-
-def fix_seed(seed, determinism_level):
-    """
-    seed: seed to place in every random module
-    determinism_level: there are three levels of determinsm:
-    - 0: no determisn at all, everything is random, so it means seed will be ignored.
-    - 1: only placing the seed
-    - 2: placing seed plus making torch deterministic
-    """
-
-    if determinism_level >= 1:
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)  # Upon multiple GPUs
-
-    if 2 == determinism_level:
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-
-def init_seed(cfg):
-    seed = cfg['training'].get('seed', -1)
-    if seed < 0:
-        seed = random.randint(0, 2**32 - 1) 
-
-    print("seed:", seed)
-
-    determinism_level = cfg['training'].get("determinism_level", 0)
-    if 0 == determinism_level:
-        cfg["training"]["determinism_level"] = determinism_level
-
-    fix_seed(seed, determinism_level)
-
-def unfreeze_backbone_attemp(model, optimizer, curr_epoch, cfg):
-
-    if not (curr_epoch in cfg["uepoch"]):
-        return
-
-    idx_cfg = cfg["uepoch"].index(curr_epoch)
-    unfreeze_backbone(model, cfg["uphase"][idx_cfg])
-    
-    if cfg["ulr"] is None:
-        return
-
-    if "None" == cfg["ulr"][idx_cfg]:
-        return
-
-    for param_group in optimizer.param_groups:
-        param_group["lr"] = cfg["ulr"][idx_cfg]
-
 class Criterion(torch.nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -733,7 +675,7 @@ class Criterion(torch.nn.Module):
             #self.alpha = cfg.get("alpha", [0.15])
             #self.beta = cfg.get("beta", [1.0])
 
-        if None == self.mode:
+        if self.mode is None:
             raise ValueError("`criterion` is required in configuration file, `tripletloss`, `crossentropy`, `both`.")
 
     def forward(self, feats, logits, labels, epoch):
@@ -757,8 +699,26 @@ class Criterion(torch.nn.Module):
         else:
             raise ValueError("Something went wrong during loss calculation. Make sure the criterios are correctly set in the configuration.")
 
-def update_lr(opt, epoch, lr_scheduling, lr_schedule_at):
-    if not (epoch in lr_schedule_at):
+"""## training utils | Schedulers """
+def attempt_unfreeze_backbone(model, optimizer, curr_epoch, cfg):
+
+    if curr_epoch not in cfg["uepoch"]:
+        return
+
+    idx_cfg = cfg["uepoch"].index(curr_epoch)
+    unfreeze_backbone(model, cfg["uphase"][idx_cfg])
+    
+    if cfg["ulr"] is None:
+        return
+
+    if "None" == cfg["ulr"][idx_cfg]:
+        return
+
+    for param_group in optimizer.param_groups:
+        param_group["lr"] = cfg["ulr"][idx_cfg]
+
+def attempt_update_lr(opt, epoch, lr_scheduling, lr_schedule_at):
+    if epoch not in lr_schedule_at:
         return
     idx = lr_schedule_at.index(epoch)
     
@@ -766,27 +726,49 @@ def update_lr(opt, epoch, lr_scheduling, lr_schedule_at):
     for param_group in opt.param_groups:
         param_group['lr'] *= lr_coeff
 
+def attempt_update_dataAugmentation(dataset, epoch, cfg):
+    if epoch == cfg["pre_trasform_at"]:
+        dataset.enable_pre_transform(True)
+        print("Enabling pre transforms")
+    if epoch == ["post_transform_at"]:
+        dataset.enable_post_transform(True)
+        print("Enabling post transforms")
+
+"""## training utils | Storage Utils """
+
+def save_checkpoint(cfg, model, optimizer, epoch, scaler, best_mAP, mAP):
+    fname = cfg['model_filename']
+
+    # Save the best model based on mAP
+    if mAP > best_mAP:
+        best_mAP = mAP
+        save_torchWRN_checkpoint(f"{fname}_best", model, optimizer, epoch, scaler, best_mAP)
+
+    if not cfg["save"]:
+        return
+
+    # Save the model in the latest training epoch
+    save_torchWRN_checkpoint(fname, model, optimizer, epoch, scaler, best_mAP)
+
+    # Save the model periodically
+    if epoch % cfg["training"]["checkpoint_period"]:
+        return
+    save_torchWRN_checkpoint(f"{fname}_{epoch:03}epoch", model, optimizer, epoch, scaler, best_mAP)
+    
 """# Train """
 from tqdm import tqdm
 def train(config_file, mode="train", experiment_name="default"):
     config = load_config(config_file)
+
+    # Seed and Learning Rate
     init_seed(config)
-
-    ending_epoch = config['training']['epochs']
-    use_memory_bank = config["training"].get("memory_bank", False)
-    if not use_memory_bank:
-        config['training']["memory_bank"] = False
-
-    # Init Learning Rate
-    lr, lr_scheduling, lr_schedule_at = init_lr(config)
+    lr, lr_scheduling, lr_schedule_at = init_LearningRate(config)
 
     # Directories, Filenames Model and Metrics
     init_logs(config, experiment_name)
-    print(f"Metrics @ {config['metrics_filename']}, Model @ {config['model_filename']}")
 
     # Init Dataset
-    num_classes, train_loader = init_dataset(config)
-    print(f"Number of classes: {num_classes} | Important upon deployment.")
+    num_classes, train_loader, tdataset = init_dataset(config)
 
     # Save new config yaml
     save_config(config)
@@ -795,13 +777,15 @@ def train(config_file, mode="train", experiment_name="default"):
     model = MarsSmall128(num_classes=num_classes).cuda()
 
     criterion = Criterion(config["training"])
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-8)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-8) # 1e-8 by design
     scaler = GradScaler(torch.device('cuda'))   # Automatic Mixed Precision
 
     start_epoch, best_mAP = init_model_to_train(config, mode, model, optimizer, scaler)
+    ending_epoch = config['training']['epochs']
 
-    if use_memory_bank:
-        memory_bank = init_memory_bank(128, criterion, config)
+    # Summary
+    print(f"Metrics @ {config['metrics_filename']}, Model @ {config['model_filename']}")
+    print(f"Number of classes: {num_classes} | Important upon deployment.")
 
     # Training the model
     for epoch in range(start_epoch, ending_epoch):
@@ -810,30 +794,19 @@ def train(config_file, mode="train", experiment_name="default"):
         model.train()
         running_loss = 0.0
 
-        # Unfreezing the backbone
+        # Schedulers {
+        # - Unfreezing the backbone
         if "finetune" == mode:
-            unfreeze_backbone_attemp(model, optimizer, epoch, config["unfreeze_backbone"])
+            attempt_unfreeze_backbone(model, optimizer, epoch, config["unfreeze_backbone"])
 
-        # Saving checkpoint at epochs multiple of checkpoint_period
-        if epoch > 0:
-            guard = (0 == epoch % config["training"]["checkpoint_period"]) \
-                    or (1 == (epoch - start_epoch))
-            if guard:
-                save_torchWRN_checkpoint(config['model_filename'] + f"_{epoch:02}epoch", 
-                                         model, 
-                                         optimizer, 
-                                         epoch,
-                                         scaler,
-                                         best_mAP)
+        # - Learning Rate
+        if lr_schedule_at is not None: 
+            attempt_update_lr(optimizer, epoch, lr_scheduling, lr_schedule_at)
 
-        # Learning Rate Sheduling
-        if lr_schedule_at != None: 
-            update_lr(optimizer, epoch, lr_scheduling, lr_schedule_at)
-
-        if lr_scheduling and lr_schedule_at == epoch:
-            for param_group in optimizer.param_groups:
-                param_group['lr'] *= 0.1
-
+        # - Post/Pre Data Augmentation
+        attempt_update_dataAugmentation(tdataset, epoch, config["training"])
+        # }
+        
         for images, labels, _ in tqdm(train_loader):
 
             optimizer.zero_grad()
@@ -841,14 +814,9 @@ def train(config_file, mode="train", experiment_name="default"):
 
             # Automatic Mixed Precision (only works in cuda
             with autocast(device_type=torch.device("cuda").type):
-
                 feats, logits = model(images, return_embedding=False)  # returns Embeddings
-                if use_memory_bank:
-                    loss = memory_bank.criterion(feats, labels)
-                else:
-                    loss = criterion(feats, logits, labels, epoch)
+                loss = criterion(feats, logits, labels, epoch)
 
-            
             scaler.scale(loss).backward()
             
             # Avoids nans
@@ -859,10 +827,6 @@ def train(config_file, mode="train", experiment_name="default"):
 
             running_loss += loss.item()
 
-            # Terminate the experiment as soon as soon as the loss crashes.
-            if torch.isnan(loss).any():
-                break
-
         del images, labels, feats, logits
         torch.cuda.empty_cache()
 
@@ -870,25 +834,10 @@ def train(config_file, mode="train", experiment_name="default"):
         print(f"Average loss: {average_loss}.")
 
         cmc, mAP = evaluate_mAP_CMCD(config, model, 128)
-
-        if mAP > best_mAP:
-            save_torchWRN_checkpoint(config['model_filename'] + "_best", 
-                                     model, 
-                                     optimizer, 
-                                     epoch,
-                                     scaler,
-                                     best_mAP)
-            best_mAP = mAP
-
         lr = optimizer.param_groups[0]['lr']
 
+        save_checkpoint(config, model, optimizer, epoch, scaler, best_mAP, mAP)
         save_metrics(config['metrics_filename'], epoch, average_loss, mAP, cmc, lr)
-        save_torchWRN_checkpoint(config['model_filename'], 
-                                 model, 
-                                 optimizer, 
-                                 epoch,
-                                 scaler,
-                                 best_mAP)
 
         print(f"Epoch\t\tLoss\tmAP\tRank-1\tRank-5\tRank-10")
         print(f"{epoch + 1}\t\t{average_loss:.4f}\t{mAP:.4f}\t{cmc[0]:.4f}\t{cmc[4]:.4f}\t{cmc[9]:.4f}\t{lr:.6f}")

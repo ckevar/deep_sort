@@ -9,8 +9,8 @@ class ReIDListDataset(Dataset):
         self.samples = []
         self.pre_transform = pre_transform
         self.post_transform = post_transform
-        self.enable_pre_transform = False
-        self.enable_post_transform = False
+        self.pre_transform_on = False
+        self.post_transform_on = False
 
         with open(list_path, 'r') as f:
 

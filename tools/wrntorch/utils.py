@@ -75,6 +75,11 @@ def load_config(config_filename):
 def save_config(cfg):
     cfg_filename = f"{cfg['experiment_log_dir']}/config.yaml"
     yaml_str = yaml.safe_dump(cfg)
+
+    # Init save storage
+    save = cfg.get("save", False)
+    if not save: cfg["save"] = save
+
     with open(cfg_filename, "w") as f:
         f.write(yaml_str)
  
