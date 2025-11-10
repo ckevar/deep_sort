@@ -379,7 +379,7 @@ def __set_requires_grad(modules:list, unfreeze:bool):
         if unfreeze:
             m.train()
         else:
-            m.aval()
+            m.eval()
 
 def freeze_model(model, phase):
 
