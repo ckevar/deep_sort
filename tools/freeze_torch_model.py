@@ -481,6 +481,9 @@ def init_dataset(config):
         config["training"]["post_trasform_at"] = post_trasform_at
         post_transform = None
 
+    print("pre type", type(pre_trasform))
+    print("post type", type(post_trasform))
+
     root_dir = config["root_dir"]
 
     train_dataset = ReIDListDataset(
