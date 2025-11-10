@@ -481,8 +481,8 @@ def init_dataset(config):
         config["training"]["post_trasform_at"] = post_trasform_at
         post_transform = None
 
-    print("pre type", type(pre_trasform))
-    print("post type", type(post_trasform))
+    print("pre type", type(pre_transform))
+    print("post type", type(post_transform))
 
     root_dir = config["root_dir"]
 
