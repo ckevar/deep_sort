@@ -678,9 +678,11 @@ class Criterion(torch.nn.Module):
             raise ValueError("`criterion` is required in configuration file, `tripletloss`, `crossentropy`, `both`.")
 
     def forward(self, feats, logits, labels, epoch):
-
+        """ 
+        # Disables cross entropy at:
         if 57 == epoch:
             self.mode = 1
+        """
 
         if 0 == self.mode: # cross entropy alone
             return self.criterion[0](logits, labels)
@@ -689,8 +691,8 @@ class Criterion(torch.nn.Module):
             return self.criterion[1](feats, labels)
 
         elif 2 == self.mode: # Cross entropy + Triplet Loss
-            #if 43 == epoch: self.alpha, self.beta = 1.0, 6.6
-            #if 50 == epoch: self.mode = 1 # triplet loss only
+            if 56 == epoch: self.alpha, self.beta = 1.0, 6.6
+            #if 56 == epoch: self.mode = 1 # triplet loss only
             lossCE = self.criterion[0](logits, labels)
             lossTP = self.criterion[1](feats, labels)
             loss = self.alpha * lossCE + self.beta * lossTP
