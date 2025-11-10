@@ -68,14 +68,12 @@ class ReIDListDataset(Dataset):
             img = img.convert("RGB")
 
             if self.pre_transform_on:
-                print("We are pre transforming")
                 img = self.pre_transform(img)
 
             if self.transform:
                 img = self.transform(img)
 
             if self.post_transform_on:
-                print("we are post transforming")
                 img = self.post_transform(img)
 
         return img, label, camid

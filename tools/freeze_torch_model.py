@@ -376,6 +376,11 @@ def __set_requires_grad(modules:list, unfreeze:bool):
         for p in m.parameters():
             p.requires_grad = unfreeze
 
+        if unfreeze:
+            m.train()
+        else:
+            m.aval()
+
 def freeze_model(model, phase):
 
     if phase >= 2: # Freeze just shallow layers
@@ -480,9 +485,6 @@ def init_dataset(config):
     if post_trasform_at is None: 
         config["training"]["post_trasform_at"] = post_trasform_at
         post_transform = None
-
-    print("pre type", type(pre_transform))
-    print("post type", type(post_transform))
 
     root_dir = config["root_dir"]
 
@@ -700,8 +702,8 @@ class Criterion(torch.nn.Module):
             lossTP = self.criterion[1](feats, labels)
             loss = self.alpha * lossCE + self.beta * lossTP
             return loss
-        else:
-            raise ValueError("Something went wrong during loss calculation. Make sure the criterios are correctly set in the configuration.")
+
+        raise ValueError("Something went wrong during loss calculation. Make sure the criterios are correctly set in the configuration.")
 
 """## training utils | Schedulers """
 def attempt_unfreeze_backbone(model, optimizer, curr_epoch, cfg):
@@ -812,7 +814,7 @@ def train(config_file, mode="train", experiment_name="default"):
 
         # - Learning Rate
         if lr_schedule_at is not None: 
-            attempt_update_lr(model, optimizer, epoch, lr_scheduling, lr_schedule_at, restart=True)
+            attempt_update_lr(model, optimizer, epoch, lr_scheduling, lr_schedule_at, restart=False)
 
         # - Post/Pre Data Augmentation
         attempt_update_dataAugmentation(tdataset, epoch, config["training"])
