@@ -853,7 +853,7 @@ def train(config_file, mode="train", experiment_name="default"):
         save_metrics(config['metrics_filename'], epoch, average_loss, mAP, cmc, lr)
 
         print(f"Epoch\t\tLoss\tmAP\tRank-1\tRank-5\tRank-10")
-        print(f"{epoch + 1}\t\t{average_loss:.4f}\t{mAP:.4f}\t{cmc[0]:.4f}\t{cmc[4]:.4f}\t{cmc[9]:.4f}\t{lr:.6f}")
+        print(f"{epoch + 1}\t\t{average_loss:.4f}\t{mAP:.4f}\t{cmc[0]:.4f}\t{cmc[4]:.4f}\t{cmc[9]:.4f}\t{lr:.10f}")
 
 import argparse
 def user_config():
