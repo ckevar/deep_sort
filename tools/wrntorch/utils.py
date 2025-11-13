@@ -111,10 +111,9 @@ def init_logs(cfg, experiment_name):
 
     # Make Filenames
     log_dir = cfg["experiment_log_dir"]
-    filename_proto = f"{log_dir}/%s_lr{cfg['training']['lr']}_p{cfg['training']['p']}_k{cfg['training']['k']}.%s"
 
-    metrics_filename = filename_proto % ("results", "dat")
-    model_filename = filename_proto % ("model", "pth")
+    metrics_filename = f"{log_dir}/results.dat"
+    model_filename = f"{log_dir}/model.pth"
 
     cfg['metrics_filename'] = metrics_filename
     cfg['model_filename'] = model_filename

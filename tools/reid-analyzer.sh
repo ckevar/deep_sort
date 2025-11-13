@@ -40,6 +40,21 @@ __fetch_cache() {
   fi
 }
 
+wget_dat () {
+  DATASET_ID="$1"
+  GROUP_ID="$2"
+  TARGET_DIR="$3"
+  DATASET_ROOT="$TARGET_DIR/$DATASET_ID"
+
+  TARGET_DIR="$DATASET_ROOT.d/$GROUP_ID"
+
+  for REMOTE_DIR in $(yq ".$GROUP_ID.experiments.*.result_path" "$DATASET_ROOT.yaml"); do
+    URL="https://huggingface.co/ckevar/wrn-deepSORT/resolve/main/$REMOTE_DIR/$_DAT_FILE"
+    wget -qO "$URL"
+  done
+
+}
+
 download_data_margin_not() {
   DATASET_ID="$1"
   TARGET_DIR="$2"
@@ -341,6 +356,8 @@ print_help() {
 
 }
 
+
+
 if [ -z "$2" ]; then
   printf "You need to pass a directory to operate from.\n"
   print_help
@@ -355,6 +372,8 @@ if [ -z "$EXP_ID" ]; then
   exit 1
 fi
 
+echo "TASK: $TASK"
+
 DATASET_ID="${DATASET_ID:-mot17}"
 
 
@@ -362,6 +381,9 @@ DATASET_ID="${DATASET_ID:-mot17}"
 if [ "download" = "$TASK" ]; then
   "download_data_$EXP_ID" "$DATASET_ID" $1
 
+elif [ "wget" = "$TASK" ]; then
+  wget_dat "$DATASET_ID" "$EXP_ID" $1
+  
 # PLOTTINGS
 elif [ "plot" = "$TASK" ]; then
   plot "$DATASET_ID" "$EXP_ID" "$@"

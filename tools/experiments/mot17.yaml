@@ -460,8 +460,6 @@ unfreeze_res4_res5:
       status: ongoing
       result_path: unfreeze_res4_res5-mot17-at-phase6/logs/both_crossentropy-off_at50
 
-
-
 unfreeze_res2_res3:
   goal: Evaluate whether unfreezing residual layers res2 and res3 increase the mAP.
   conclusion: Unfreezing this two layers in anyway increases mAP metric.

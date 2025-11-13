@@ -663,15 +663,15 @@ class Criterion(torch.nn.Module):
         self.epochs = None
         self.criterion = [None, None]
 
-        if mode in ("crossentropy", "both"):
+        if mode in ("crossentropy", "both", "combined"):
             self.criterion[0] = nn.CrossEntropyLoss()
             self.mode = 0
 
-        if mode in ("tripletloss", "both"):
+        if mode in ("tripletloss", "both", "combined"):
             self.criterion[1] = TripletLoss(margin=cfg["triplet_margin"])
             self.mode = 1
 
-        if "both" == mode:
+        if mode in ("both", "combined"):
             self.mode = 2
             self.alpha = cfg.get("alpha", 0.15)
             self.beta = cfg.get("beta", 1.0)
@@ -696,8 +696,11 @@ class Criterion(torch.nn.Module):
             return self.criterion[1](feats, labels)
 
         elif 2 == self.mode: # Cross entropy + Triplet Loss
+            """
+            # Sheduling Coefficients
             #if 56 == epoch: self.alpha, self.beta = 1.0, 6.6 # This is going to be our last hope.
             #if 56 == epoch: self.mode = 1 # triplet loss only
+            """
             lossCE = self.criterion[0](logits, labels)
             lossTP = self.criterion[1](feats, labels)
             loss = self.alpha * lossCE + self.beta * lossTP
