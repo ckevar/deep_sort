@@ -476,14 +476,14 @@ def init_dataset(config):
         transforms.RandomErasing(p=0.75)
     ])
 
-    pre_trasform_at = config["training"].get("pre_trasform_at", None)
-    if pre_trasform_at is None: 
-        config["training"]["pre_trasform_at"] = pre_trasform_at
+    pre_transform_at = config["training"].get("pre_transform_at", None)
+    if pre_transform_at is None: 
+        config["training"]["pre_transform_at"] = pre_transform_at
         pre_transform = None
 
-    post_trasform_at = config["training"].get("post_trasform_at", None)
-    if post_trasform_at is None: 
-        config["training"]["post_trasform_at"] = post_trasform_at
+    post_transform_at = config["training"].get("post_transform_at", None)
+    if post_transform_at is None: 
+        config["training"]["post_transform_at"] = post_transform_at
         post_transform = None
 
     root_dir = config["root_dir"]
@@ -740,10 +740,10 @@ def attempt_update_lr(model, opt, epoch, lr_scheduling, lr_schedule_at, restart=
     return opt
 
 def attempt_update_dataAugmentation(dataset, epoch, cfg):
-    if epoch == cfg["pre_trasform_at"]:
+    if epoch == cfg["pre_transform_at"]:
         dataset.enable_pre_transform(True)
         print("Enabling pre transforms")
-    if epoch == ["post_transform_at"]:
+    if epoch == cfg["post_transform_at"]:
         dataset.enable_post_transform(True)
         print("Enabling post transforms")
 

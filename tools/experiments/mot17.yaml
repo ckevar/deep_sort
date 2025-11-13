@@ -1,0 +1,536 @@
+augmentation_ablation:
+  goal: Test impact of data augmentation
+  conclusion: Data augmentation worsens mAP metrics. the hypothesis is, since only the semantic layers are being trained, colour jitter or random crop are just throwing poison into the network, maybe they could be useful when shallow layers are being trained. 
+  params:
+    phase: 6, Only classifier and feature map layer is trainable
+    epochs: 100
+    p: 22
+    k: 27
+    lr: 0.003
+    margin: 0.2
+    loss: triplet
+    seed: 3602597925
+    augmentation: under study
+  experiments:
+    no_augs:
+      description: No augmentation baseline
+      loss: triplet
+      augmentation: None
+      status: done 
+      result_path: lr_not-mot17-at-phase6/logs/lr0.003
+    standard_augs:
+      description: With standard augmentations
+      augmentation: colour jitter and random crop
+      status: lost
+      result_path:  None
+
+triplet_margin:
+  goal: Tune margin for triplet loss
+  conclusion: When the classifier and feature map layer are being trained, the margin doesn't affect the networks performance in terms of mAP.
+  params:
+    phase: 6, Only classifier and feature map layer is trainable
+    epochs: 30
+    p: 22
+    k: 27
+    lr: 0.003
+    margin: under study
+    loss: triplet
+    seed: 3602597925
+    augmentation: None
+  experiments:
+    m-1:
+      description: Triplet margin test (margin=0.1)
+      margin: 0.1
+      status: done
+      result_path: margin_not-mot17/logs/m-1/
+    m-4:
+      description: Triplet margin test (margin=0.3)
+      margin: 0.4
+      status: done
+      result_path: margin_not-mot17/logs/m-4/
+    m-7:
+      description: Triplet margin test (margin=0.3)
+      margin: 0.7
+      status: done
+      result_path: margin_not-mot17/logs/m-7/
+
+frozen_backbone:
+  goal: To determine whether it's better to finetune the entire network/partial (initial_phase 1 & 3) from the very beginning or it's better to keep the backbone frozen and only train the head and the last residual module (initial phase equal 6).
+  conclusion: Keeping the backbone frozen improves the networks performance in terms of mAP, while a partially or fully backbone unfrozen makes the mAP to eventually collapse and not reaching the same mAP value over the training. So, the next move to understand if unfreezing over training makes things better.
+  params:
+    initial_phase: under study
+    p: 22
+    k: 27
+    augmentation: None
+    loss: triplet
+    seed: 3602597925
+    margin: 0.2
+    lr: 0.003 
+  note: I actually performed this experiment for different learning rates lr@phase3=[0.0001, 0.001, 0.003] and lr@phase6=[0.0001,0.001,0.003,0.0045,0.006,0.01] but the pattern is kept, so, in phase 1, i only test with a single learning rate (lr=0.003)
+  experiments:
+    unfrozen-backbone:
+      description: The entire network is trained, from shallow layers to deep layers
+      initial_phase: 1
+      status: pending
+    partially-unfrozen:
+      description: The backbone is partially unfrozen, the shallow layers are frozen, while the deep layers are unfrozen.
+      initial_phase: 3
+      status: done
+      result_path: lr_not-mot17-at-phase3/logs/lr0.003
+
+    frozen-backbone:
+      description: Only feature map layer (last residual layer) is unfrozen and the header (classifier).
+      initial_phase: 6
+      result_path: lr_not-mot17-at-phase6/logs/lr0.003
+
+lr_sweep_triplet_loss:
+  goal: Find optimal learning rate
+  conclusion: A higher learning rate shrinks the mAP behaviour over epochs, while a small LR expands this behaviour.
+  params:
+    initial_phase: 6, Only classifier and feature map layer is trainable.
+    p: 22
+    k: 27
+    lr: under study
+    margin: 0.2
+    loss: triplet
+    seed: 3602597925
+    augmentation: None
+  experiments:
+    lr-0.0001:
+      description: Learning rate 0.0001 test
+      lr: 0.0001
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.0001
+    lr-0.001:
+      description: Learning rate 0.001 test
+      lr: 0.001
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.001
+    lr-0.003:
+      description: Learning rate 0.003 test
+      lr: 0.003
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.003/
+    lr-0.0045:
+      description: Learning rate 0.0042 test
+      lr: 0.0045
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.0045/
+    lr-0.006:
+      description: Learning rate 0.006 test
+      lr: 0.006
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.006/
+    lr-0.006:
+      description: Learning rate 0.006 test
+      lr: 0.006
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.006/
+
+loss_type:
+  goal: Find optimal loss
+  conclusion: triplet loss' mAP grows fast, while cross entropy loss /w cc' mAP grows steady over epochs. In terms of loss, triplet loss' loss is way smaller (at around 0.05) while cross entropy loss /w cc' loss is way larger, at around 1.6-ish. So, when merging them, it's recommended to shring the cross entropy loss rather than a 1-to-1 linear combination.
+  params:
+    initial_phase: 6, Only classifier and feature map layer is trainable.
+    p: 22
+    k: 27
+    augmentation: None
+    loss: under study
+    seed: 3602597925
+    margin: 0.2
+    lr: 0.003
+  experiments:
+    loss-triplet:
+      description: the loss is only triplet loss
+      loss: triplet loss
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.003/
+    loss-crossentropy:
+      description: loss is cross entropy alone with a cosine classifier in the head.
+      loss: cross entropy
+      status: done
+      result_path: lr_not_ce-mot17-at-phase6/logs/lr0.003/
+
+loss_combination:
+  goal: Find optimal coefficients to combine triplet and cross entropy loss.
+  conclusion: shrinking the cross entropy loss helps to maximimse the mAP which also has a faster response, but it eventually leads to collapse.
+  params:
+    initial_phase: 6, Only classifier and feature map layer is trainable.
+    p: 22
+    k: 27
+    augmentation: None
+    loss: both # cross entropy and triplet
+    seed: 3602597925
+    margin: 0.2
+    lr: 0.003
+    a: under study # cross entropy coefficients
+    b: under study # triplet coefficients
+    schedule_coeff: under study
+  experiments:
+    comb-1-1:
+      description: cross entropy and triplets loss are linearly combined, resulting in a poor mAP performance. It might be because the loss is too large that pushes the triplet too far from the surface of interest.
+      a: 1
+      b: 1
+      schedule_coeff: 0
+      status: to rerun / to find
+      result_path: lr_not_celt_1_1-mot17-at-phase6/logs/lr0.003/
+    comb-a-B:
+      description: cross entropy coefficients (a) is smaller than triplet coefficient (b)
+      a: 0.15
+      b: 1
+      status: lost
+      result_path:
+
+    comb-scheduled:
+      description: cross entropy coefficient and triplets keep their coefficients until epoch 43, where the coefficients are chaged, prioritizing the cross entropy's loss because after this, the cross entropy mAP keeps growing. This helped maintainin the mAP high for a while, but the peak found in com-a-B wasn't exceeded, the mAP decay happens eventually, so scheduling the mixing seems not be a good idea.
+      a: [0.15, 1]
+      b: [1, 0.15] # this might have been [1 6.66]
+      schedule_coeff: 43
+      status: lost
+      result_path: None
+
+unfreeze_res4_res5:
+  goal: Understand the behaviour of individual loss types upon unfreezing the residual layers Res4 and Res5, this will lead to decide if we need to reschedule the learning rate as well.
+  conclusion: Combining the loss makes the mAP to achieve faster a higher value, however, it decays faster as well, this decays (i think) might settle in the cross entropy's mAP rather than fully decaying as it  could be when using solely triplet. The peak achieved in this configuration is at epoch 50 (triplet alone 
+  params:
+    initial_phase: 6, Only classifier and feature map layer is trainable.
+    p: 22
+    k: 27
+    augmentation: None
+    loss: under study
+    seed: 3602597925
+    margin: 0.2
+    lr: 0.003
+    unfreeze_at: [43]
+    unfreeze_phase: [3] # Only Res4 and Res5
+    unfreeze_lr: [None]
+    a: 0.15 # upon using loss combination a * loss_ce + b loss_triplet
+    b: 1
+
+  experiments:
+    tripletloss-unfreeze43:
+      description: Layers res4 and res5 are unfrozen at epoch 43, where the peak is found when triplet loss and cross entropy's loss is combined, but loss is triplet alone. This shows mAP keeps growing after unfreezing layers res4 & res5.
+      loss: triplet loss
+      status: done
+      result_path: unfreeze_res4_res5-mot17-at-phase6/logs/tripletloss-unfreeze43
+    crossentropy-unfreeze43:
+      description: Layers res4 and res5 are unfrozen at epoch 43, where the peak is found when triplet loss and cross entropy's loss is combined, but loss is cross entropy. After unfreezing, there's a slight growth, reaching a peak at epoch 40 and then decaying. But this peak is smaller than triplet method's mAP.
+      loss: cross entropy
+      status: done
+      result_path: unfreeze_res4_res5-mot17-at-phase6/logs/crossentropy-unfreeze43
+    both-unfreeze43:
+      description: Layers res4 and res5 are unfrozen at epoch 43, where the peak is found when triplet and cross entropy loss are combined. The combination eventually leads to reach a peak, as tall as triplet's but instead of remaining there it decays, meeting the mAP yielded by the cross entropy loss.
+      loss: both
+      status: done
+      result_path: unfreeze_res4_res5-mot17-at-phase6/logs/both-unfreeze43
+    both_crossentropy off_at50:
+      description: Layers res4 and res5 are unfrozen at epoch 43, where the peak is found when triplet and cross entropy loos are combined, but at epoch 50, where the peak is found, cross entropy loss is ditched. This shows that setting off the cross entropy loss, makes de decay faster, this could be due to the fact the triplet loss has already being pushed to the limits and it's overfitting now, so turning it off is not a good idea and we have also seen from the previous experiment, instead of punishing the cross entropy loss (coefficient less than 0) and keeping at one and leveling up the triplet loss (coefficient larger than zero, can maitain the mAP at peak for quite some epochs before collapsing). We have also observed that there's a momemtum between making a change in the optimizer and the response of the mAP.
+      loss: both
+      status: ongoing
+      result_path: unfreeze_res4_res5-mot17-at-phase6/logs/both_crossentropy-off_at50
+
+augmentation_ablation:
+  goal: Test impact of data augmentation
+  conclusion: Data augmentation worsens mAP metrics. the hypothesis is, since only the semantic layers are being trained, colour jitter or random crop are just throwing poison into the network, maybe they could be useful when shallow layers are being trained. 
+  params:
+    phase: 6, Only classifier and feature map layer is trainable
+    epochs: 100
+    p: 22
+    k: 27
+    lr: 0.003
+    margin: 0.2
+    loss: triplet
+    seed: 3602597925
+    augmentation: under study
+  experiments:
+    no_augs:
+      description: No augmentation baseline
+      loss: triplet
+      augmentation: None
+      status: done 
+      result_path: lr_not-mot17-at-phase6/logs/lr0.003
+    standard_augs:
+      description: With standard augmentations
+      augmentation: colour jitter and random crop
+      status: lost
+      result_path:  None
+
+triplet_margin:
+  goal: Tune margin for triplet loss
+  conclusion: When the classifier and feature map layer are being trained, the margin doesn't affect the networks performance in terms of mAP.
+  params:
+    phase: 6, Only classifier and feature map layer is trainable
+    epochs: 30
+    p: 22
+    k: 27
+    lr: 0.003
+    margin: under study
+    loss: triplet
+    seed: 3602597925
+    augmentation: None
+  experiments:
+    m-1:
+      description: Triplet margin test (margin=0.1)
+      margin: 0.1
+      status: done
+      result_path: margin_not-mot17/logs/m-1/
+    m-4:
+      description: Triplet margin test (margin=0.3)
+      margin: 0.4
+      status: done
+      result_path: margin_not-mot17/logs/m-4/
+    m-7:
+      description: Triplet margin test (margin=0.3)
+      margin: 0.7
+      status: done
+      result_path: margin_not-mot17/logs/m-7/
+
+frozen_backbone:
+  goal: To determine whether it's better to finetune the entire network/partial (initial_phase 1 & 3) from the very beginning or it's better to keep the backbone frozen and only train the head and the last residual module (initial phase equal 6).
+  conclusion: Keeping the backbone frozen improves the networks performance in terms of mAP, while a partially or fully backbone unfrozen makes the mAP to eventually collapse and not reaching the same mAP value over the training. So, the next move to understand if unfreezing over training makes things better.
+  params:
+    initial_phase: under study
+    p: 22
+    k: 27
+    augmentation: None
+    loss: triplet
+    seed: 3602597925
+    margin: 0.2
+    lr: 0.003 
+  note: I actually performed this experiment for different learning rates lr@phase3=[0.0001, 0.001, 0.003] and lr@phase6=[0.0001,0.001,0.003,0.0045,0.006,0.01] but the pattern is kept, so, in phase 1, i only test with a single learning rate (lr=0.003)
+  experiments:
+    unfrozen-backbone:
+      description: The entire network is trained, from shallow layers to deep layers
+      initial_phase: 1
+      status: pending
+    partially-unfrozen:
+      description: The backbone is partially unfrozen, the shallow layers are frozen, while the deep layers are unfrozen.
+      initial_phase: 3
+      status: done
+      result_path: lr_not-mot17-at-phase3/logs/lr0.003
+
+    frozen-backbone:
+      description: Only feature map layer (last residual layer) is unfrozen and the header (classifier).
+      initial_phase: 6
+      result_path: lr_not-mot17-at-phase6/logs/lr0.003
+
+lr_sweep_triplet_loss:
+  goal: Find optimal learning rate
+  conclusion: A higher learning rate shrinks the mAP behaviour over epochs, while a small LR expands this behaviour.
+  params:
+    initial_phase: 6, Only classifier and feature map layer is trainable.
+    p: 22
+    k: 27
+    lr: under study
+    margin: 0.2
+    loss: triplet
+    seed: 3602597925
+    augmentation: None
+  experiments:
+    lr-0.0001:
+      description: Learning rate 0.0001 test
+      lr: 0.0001
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.0001
+    lr-0.001:
+      description: Learning rate 0.001 test
+      lr: 0.001
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.001
+    lr-0.003:
+      description: Learning rate 0.003 test
+      lr: 0.003
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.003/
+    lr-0.0045:
+      description: Learning rate 0.0042 test
+      lr: 0.0045
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.0045/
+    lr-0.006:
+      description: Learning rate 0.006 test
+      lr: 0.006
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.006/
+    lr-0.006:
+      description: Learning rate 0.006 test
+      lr: 0.006
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.006/
+
+loss_type:
+  goal: Find optimal loss
+  conclusion: triplet loss' mAP grows fast, while cross entropy loss /w cc' mAP grows steady over epochs. In terms of loss, triplet loss' loss is way smaller (at around 0.05) while cross entropy loss /w cc' loss is way larger, at around 1.6-ish. So, when merging them, it's recommended to shring the cross entropy loss rather than a 1-to-1 linear combination.
+  params:
+    initial_phase: 6, Only classifier and feature map layer is trainable.
+    p: 22
+    k: 27
+    augmentation: None
+    loss: under study
+    seed: 3602597925
+    margin: 0.2
+    lr: 0.003
+  experiments:
+    loss-triplet:
+      description: the loss is only triplet loss
+      loss: triplet loss
+      status: done
+      result_path: lr_not-mot17-at-phase6/logs/lr0.003/
+    loss-crossentropy:
+      description: loss is cross entropy alone with a cosine classifier in the head.
+      loss: cross entropy
+      status: done
+      result_path: lr_not_ce-mot17-at-phase6/logs/lr0.003/
+
+loss_combination:
+  goal: Find optimal coefficients to combine triplet and cross entropy loss.
+  conclusion: shrinking the cross entropy loss helps to maximimse the mAP which also has a faster response, but it eventually leads to collapse.
+  params:
+    initial_phase: 6, Only classifier and feature map layer is trainable.
+    p: 22
+    k: 27
+    augmentation: None
+    loss: both # cross entropy and triplet
+    seed: 3602597925
+    margin: 0.2
+    lr: 0.003
+    a: under study # cross entropy coefficients
+    b: under study # triplet coefficients
+    schedule_coeff: under study
+  experiments:
+    comb-1-1:
+      description: cross entropy and triplets loss are linearly combined, resulting in a poor mAP performance. It might be because the loss is too large that pushes the triplet too far from the surface of interest.
+      a: 1
+      b: 1
+      schedule_coeff: 0
+      status: to rerun / to find
+      result_path: lr_not_celt_1_1-mot17-at-phase6/logs/lr0.003/
+    comb-a-B:
+      description: cross entropy coefficients (a) is smaller than triplet coefficient (b)
+      a: 0.15
+      b: 1
+      status: lost
+      result_path:
+
+    comb-scheduled:
+      description: cross entropy coefficient and triplets keep their coefficients until epoch 43, where the coefficients are chaged, prioritizing the cross entropy's loss because after this, the cross entropy mAP keeps growing. This helped maintainin the mAP high for a while, but the peak found in com-a-B wasn't exceeded, the mAP decay happens eventually, so scheduling the mixing seems not be a good idea.
+      a: [0.15, 1]
+      b: [1, 0.15] # this might have been [1 6.66]
+      schedule_coeff: 43
+      status: lost
+      result_path: None
+
+unfreeze_res4_res5:
+  goal: Understand the behaviour of individual loss types upon unfreezing the residual layers Res4 and Res5, this will lead to decide if we need to reschedule the learning rate as well.
+  conclusion: Combining the loss makes the mAP to achieve faster a higher value, however, it decays faster as well, this decays (i think) might settle in the cross entropy's mAP rather than fully decaying as it  could be when using solely triplet. The peak achieved in this configuration is at epoch 50 (triplet alone 
+  params:
+    initial_phase: 6, Only classifier and feature map layer is trainable.
+    p: 22
+    k: 27
+    augmentation: None
+    loss: under study
+    seed: 3602597925
+    margin: 0.2
+    lr: 0.003
+    unfreeze_at: [43]
+    unfreeze_phase: [3] # Only Res4 and Res5
+    unfreeze_lr: [None]
+    a: 0.15 # upon using loss combination a * loss_ce + b loss_triplet
+    b: 1
+
+  experiments:
+    tripletloss-unfreeze43:
+      description: Layers res4 and res5 are unfrozen at epoch 43, where the peak is found when triplet loss and cross entropy's loss is combined, but loss is triplet alone. This shows mAP keeps growing after unfreezing layers res4 & res5.
+      loss: triplet loss
+      status: done
+      result_path: unfreeze_res4_res5-mot17-at-phase6/logs/tripletloss-unfreeze43
+    crossentropy-unfreeze43:
+      description: Layers res4 and res5 are unfrozen at epoch 43, where the peak is found when triplet loss and cross entropy's loss is combined, but loss is cross entropy. After unfreezing, there's a slight growth, reaching a peak at epoch 40 and then decaying. But this peak is smaller than triplet method's mAP.
+      loss: cross entropy
+      status: done
+      result_path: unfreeze_res4_res5-mot17-at-phase6/logs/crossentropy-unfreeze43
+    both-unfreeze43:
+      description: Layers res4 and res5 are unfrozen at epoch 43, where the peak is found when triplet and cross entropy loss are combined. The combination eventually leads to reach a peak, as tall as triplet's but instead of remaining there it decays, meeting the mAP yielded by the cross entropy loss.
+      loss: both
+      status: done
+      result_path: unfreeze_res4_res5-mot17-at-phase6/logs/both-unfreeze43
+    both_crossentropy off_at50:
+      description: Layers res4 and res5 are unfrozen at epoch 43, where the peak is found when triplet and cross entropy loos are combined, but at epoch 50, where the peak is found, cross entropy loss is ditched. This shows that setting off the cross entropy loss, makes de decay faster, this could be due to the fact the triplet loss has already being pushed to the limits and it's overfitting now, so turning it off is not a good idea and we have also seen from the previous experiment, instead of punishing the cross entropy loss (coefficient less than 0) and keeping at one and leveling up the triplet loss (coefficient larger than zero, can maitain the mAP at peak for quite some epochs before collapsing). We have also observed that there's a momemtum between making a change in the optimizer and the response of the mAP.
+      loss: both
+      status: ongoing
+      result_path: unfreeze_res4_res5-mot17-at-phase6/logs/both_crossentropy-off_at50
+
+
+
+unfreeze_res2_res3:
+  goal: Evaluate whether unfreezing residual layers res2 and res3 increase the mAP.
+  conclusion: Unfreezing this two layers in anyway increases mAP metric.
+  params:
+    initial_phase: 6, Only classifier and feature map layer is trainable.
+    p: 22
+    k: 27
+    augmentation: None
+    loss: both
+    seed: 3602597925
+    margin: 0.2
+    lr: 0.003
+    unfreeze_at:  [43, under study] # Epochs where the residual layers are unfreezed
+    unfreeze_phase: [3, 4] # ["Res4/Res5", "Res2/Res3"]
+    unfreeze_lr: [None, None]
+    lr_schedule_at: under study
+    lr_scheduling: under study
+    a: 0.15 # upon using loss combination a * loss_ce + b loss_triplet
+    b: 1
+
+  experiments:
+    both-unfreeze50:
+      description: The res2/res3 are unfreeze at epoch 50, it shows no increment 
+      unfreeze_at: [43, 50]
+      lr_schedule_at: Never
+      lr_scheduling: None
+      status: done
+      result_path: unfreeze_res2_res3-mot17-at-phase6/logs/both-unfreeze50
+    both-lr_coeff0.3-unfreeze56:
+      description: The res2/res4 are unfreeze at epoch 56, but learning rate is also minimized by 0.3 at epoch 47. mAP doesn't grow after unfreezing those layers, but the mAP does grow un after reducing the mAP
+      unfreeze_at: [43, 56]
+      lr_schedule_at: 47
+      lr_scheduling: 0.3 # new lr = lr*0.3
+      status: done
+      result_path: unfreeze_res2_res3-mot17-at-phase6/logs/both-lr_coeff0.3-unfreeze56/
+
+lr_schedule:
+  goal: Evaluate how much we have to shrink the learning rate to get a increase mAP, without unfreezing res2 and res3, because they dont lead anywhere.
+  conclusion: There's a clear mAP growth as the lr gets smaller, however, it has a limit, because making it too small actually the mAP reaches the same value as larger learning rates.
+  params:
+    p: 22
+    k: 27
+    augmentation: None
+    loss: both
+    seed: 3602597925
+    margin: 0.2
+    lr: 0.003
+    unfreeze_at: [43] # Only unfreezing res4 and res5 because unfreezing 
+    unfreeze_phase: [3]
+    unfreeze_lr: [None]
+    lr_schedule_at: [47, 53]
+    lr_scheduling: [0.1, under study]
+    a: 0.15
+    b: 1
+
+  experiments:
+    both-unfreezeAt43-lr47_530.0001-test:
+      description: TODO write descriotion here
+      lr_scheduling: [0.1, 0.0001]
+    both-unfreezeAt43-lr47_531e-05-test:
+      description: TODO, write description here
+      lr_scheduling: [0.1, 0.00001]
+    both-unfreezeAt43-lr47_530.001-test:
+      description: TODO, write description here
+      lr_scheduling: [0.1, 0.001]
+
+
+
+
+
+
+
