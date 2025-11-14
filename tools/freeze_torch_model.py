@@ -109,9 +109,8 @@ class CosineClassifier(nn.Module):
         weight = F.normalize(self.weight, p=2, dim=1)
         cosine = torch.matmul(features, weight.t())
         s = F.softplus(self.scale)
-        logits = s * cosine
+        logits = s * (cosine + 0.1)
         return logits
-
 
 class MarsSmall128(nn.Module):
     def __init__(self, num_classes=None):
@@ -664,7 +663,8 @@ class Criterion(torch.nn.Module):
         self.criterion = [None, None]
 
         if mode in ("crossentropy", "both", "combined"):
-            self.criterion[0] = nn.CrossEntropyLoss()
+            # There was no need to add label_smoothing for MOT17
+            self.criterion[0] = nn.CrossEntropyLoss(label_smoothing=0.1) 
             self.mode = 0
 
         if mode in ("tripletloss", "both", "combined"):
