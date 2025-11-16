@@ -472,7 +472,7 @@ def init_dataset(config):
     ])
 
     post_transform = transforms.Compose([
-        transforms.RandomErasing(p=0.75)
+        transforms.RandomErasing(p=0.5)
     ])
 
     pre_transform_at = config["training"].get("pre_transform_at", None)
@@ -726,21 +726,16 @@ def attempt_unfreeze_backbone(model, optimizer, curr_epoch, cfg):
     for param_group in optimizer.param_groups:
         param_group["lr"] = cfg["ulr"][idx_cfg]
 
-def attempt_update_lr(model, opt, epoch, lr_scheduling, lr_schedule_at, restart=False):
+def attempt_update_lr(model, opt, epoch, lr_scheduling, lr_schedule_at):
 
     if epoch not in lr_schedule_at:
         return
+
     idx = lr_schedule_at.index(epoch)
-    
     lr_coeff = lr_scheduling[idx]
 
-    if restart:
-        return optim.Adam(model.parameters(), lr=lr_coeff, weight_decay=1e-8) # 1e-8 by design
-    # else:
     for param_group in opt.param_groups:
         param_group['lr'] *= lr_coeff
-
-    return opt
 
 def attempt_update_dataAugmentation(dataset, epoch, cfg):
     if epoch == cfg["pre_transform_at"]:
@@ -817,7 +812,7 @@ def train(config_file, mode="train", experiment_name="default"):
 
         # - Learning Rate
         if lr_schedule_at is not None: 
-            attempt_update_lr(model, optimizer, epoch, lr_scheduling, lr_schedule_at, restart=False)
+            attempt_update_lr(model, optimizer, epoch, lr_scheduling, lr_schedule_at)
 
         # - Post/Pre Data Augmentation
         attempt_update_dataAugmentation(tdataset, epoch, config["training"])

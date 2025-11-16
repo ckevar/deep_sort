@@ -297,11 +297,25 @@ plot() {
 plotc() {
   COL="$1"
   shift 1
+
   PLOT_CMD="set grid"
-  PLOT_CMD="$PLOT_CMD; set key bottom; plot"
+  if [ "2" != "$COL" ]; then
+    PLOT_CMD="$PLOT_CMD; set key bottom"
+  fi
+  PLOT_CMD="$PLOT_CMD; plot"
+
+
   for DATA in "${@}"; do
-    PLOT_CMD="$PLOT_CMD '$DATA' u 1:$COL w l,"
+
+    # NOTE: If we are operating under the following file structure:
+    # `experiments/dataset.d/group/logs/exp_id/results.dat`, then, the following 
+    # line should be able to parse it.
+    IFS="/" read _ _ _GROUP _ _EXP _ < <(echo "$DATA")
+    TITLE="$_GROUP/$_EXP"
+    PLOT_CMD="$PLOT_CMD '$DATA' u 1:$COL w l title '$TITLE',"
   done
+  echo "GNU SCRIPT EXECUTED"
+  echo "$PLOT_CMD"
   gnuplot -p -e "$PLOT_CMD"
 }
 
@@ -372,8 +386,6 @@ if [ -z "$EXP_ID" ]; then
   exit 1
 fi
 
-echo "TASK: $TASK"
-
 DATASET_ID="${DATASET_ID:-mot17}"
 
 
@@ -389,7 +401,6 @@ elif [ "plot" = "$TASK" ]; then
   plot "$DATASET_ID" "$EXP_ID" "$@"
 
 elif [ "plotc" = "$TASK" ]; then
-  echo "$EXP_ID"
   plotc "$EXP_ID" "$@"
 
 # BLACK LIST: This are experiments that are not plotten for every category
