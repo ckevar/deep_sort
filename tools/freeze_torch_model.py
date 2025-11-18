@@ -827,7 +827,8 @@ def train(config_file, mode="train", experiment_name="default"):
             with autocast(device_type=torch.device("cuda").type):
                 feats, logits = model(images, return_embedding=False)  # returns Embeddings
                 loss = criterion(feats, logits, labels, epoch)
-
+            
+            print(f"Current Loss: {loss.item()}")
             scaler.scale(loss).backward()
             
             # Avoids nans
