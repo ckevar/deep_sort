@@ -817,7 +817,7 @@ def train(config_file, mode="train", experiment_name="default"):
         # - Post/Pre Data Augmentation
         attempt_update_dataAugmentation(tdataset, epoch, config["training"])
         # }
-        
+        train_sz = 0
         for images, labels, _ in tqdm(train_loader):
 
             optimizer.zero_grad()
@@ -827,8 +827,13 @@ def train(config_file, mode="train", experiment_name="default"):
             with autocast(device_type=torch.device("cuda").type):
                 feats, logits = model(images, return_embedding=False)  # returns Embeddings
                 loss = criterion(feats, logits, labels, epoch)
-            
-            print(f"Current Loss: {loss.item()}")
+
+
+            if 0.0 == loss.item():
+                print("[Warning:] Loss got 0.0")
+                continue
+
+            train_sz += 1
             scaler.scale(loss).backward()
             
             # Avoids nans
@@ -842,7 +847,7 @@ def train(config_file, mode="train", experiment_name="default"):
         del images, labels, feats, logits
         torch.cuda.empty_cache()
 
-        average_loss = running_loss / len(train_loader)
+        average_loss = running_loss / train_sz
         print(f"Average loss: {average_loss}.")
 
         cmc, mAP = evaluate_mAP_CMCD(config, model, 128)
