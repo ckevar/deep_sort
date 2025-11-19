@@ -242,7 +242,8 @@ def parse_args():
                         default=1)
     parser.add_argument("--batch_sz",
                         help="batch size to evaluate",
-                        default=512)
+                        default=512,
+                        type=int)
 
     return parser.parse_args()
 
