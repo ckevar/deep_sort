@@ -65,7 +65,7 @@ class ToNumpyUint8:
 
 def load_dataset(cfg, image_shape):
     path = cfg.dataset
-    batch_size = 512
+    batch_size = cfg.batch_sz
 
     model_file =  cfg.model
 
@@ -240,6 +240,9 @@ def parse_args():
     parser.add_argument("--num_classes",
                         help="Number of classes, optional, only for the torch version.",
                         default=1)
+    parser.add_argument("--batch_sz",
+                        help="batch size to evaluate",
+                        default=512)
 
     return parser.parse_args()
 
