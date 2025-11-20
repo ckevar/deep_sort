@@ -71,7 +71,7 @@ frozen_backbone:
     unfrozen-backbone:
       description: The entire network is trained, from shallow layers to deep layers
       initial_phase: 1
-      status: pending
+      status: pending (forget it)
     partially-unfrozen:
       description: The backbone is partially unfrozen, the shallow layers are frozen, while the deep layers are unfrozen.
       initial_phase: 3
@@ -150,6 +150,7 @@ loss_type:
       loss: cross entropy
       status: done
       result_path: lr_not_ce-mot17-at-phase6/logs/lr0.003/
+      result_path: lr_crossnetropy-mot17-at-phase6/logs/lr-0.0045
 
 loss_combination:
   goal: Find optimal coefficients to combine triplet and cross entropy loss.
@@ -178,8 +179,8 @@ loss_combination:
       description: cross entropy coefficients (a) is smaller than triplet coefficient (b)
       a: 0.15
       b: 1
-      status: lost
-      result_path:
+      status: found
+      result_path: mot17.d/lr_both-at-phase6/logs/lr0.003
 
     comb-scheduled:
       description: cross entropy coefficient and triplets keep their coefficients until epoch 43, where the coefficients are chaged, prioritizing the cross entropy's loss because after this, the cross entropy mAP keeps growing. This helped maintainin the mAP high for a while, but the peak found in com-a-B wasn't exceeded, the mAP decay happens eventually, so scheduling the mixing seems not be a good idea.

@@ -314,7 +314,7 @@ plotc() {
     TITLE="$_GROUP/$_EXP"
     PLOT_CMD="$PLOT_CMD '$DATA' u 1:$COL w l title '$TITLE',"
   done
-  echo "GNU SCRIPT EXECUTED"
+  echo "GNUPLOT CMD EXECUTED"
   echo "$PLOT_CMD"
   gnuplot -p -e "$PLOT_CMD"
 }

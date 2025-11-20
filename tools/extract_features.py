@@ -1,5 +1,4 @@
 import argparse
-from generate_detections import ImageEncoder
 import os
 from torch.utils.data import Dataset, DataLoader
 import torch
@@ -58,7 +57,6 @@ class ReIDListDataset(Dataset):
 
 class ToNumpyUint8:
     def __call__(self, img):
-        #arr = np.array(img, dtype=np.uint8)
         arr = np.array(img)
         arr = arr[:, :, ::-1].copy() # from RGB to BGR
         return arr
@@ -66,36 +64,27 @@ class ToNumpyUint8:
 def load_dataset(cfg, image_shape):
     path = cfg.dataset
     batch_size = cfg.batch_sz
+    map_file = cfg.map
 
     model_file =  cfg.model
 
     if model_file.endswith(".pb"):
-        transform_qg = transforms.Compose([
+        trans_qg = transforms.Compose([
             transforms.Resize(image_shape),
             ToNumpyUint8(),
         ])
     elif model_file.endswith(".pth"):
-        transform_qg = transforms.Compose([
+        trans_qg = transforms.Compose([
             transforms.Resize(image_shape),
             transforms.ToTensor(),
             transforms.Lambda(lambda x:x*255),
-            #transforms.Lambda(lambda x:x[[1, 2, 0], ...]) # RGB -> BGR
         ])
 
 
-    gallery_dataset = ReIDListDataset(path,
-                                      f"{path}/gallery.txt",
-                                      transform=transform_qg)
-    query_dataset = ReIDListDataset(path,
-                                    f"{path}/query.txt",
-                                    transform=transform_qg,
-                                    relabel=False)
-    query_dataset.relabel(gallery_dataset.label_map)
+    dataset = ReIDListDataset(path, f"{path}/{map_file}", transform=trans_qg, relabel=False)
+    loader = DataLoader(dataset, batch_size=batch_size)
 
-    query_loader = DataLoader(query_dataset, batch_size=batch_size)
-    gallery_loader = DataLoader(gallery_dataset, batch_size=batch_size)
-
-    return query_loader, gallery_loader, batch_size
+    return loader, batch_size
 
 def extract_features(model, loader, feat_dim, batch_sz):
     n_samples = len(loader.dataset)
@@ -126,79 +115,11 @@ def extract_features(model, loader, feat_dim, batch_sz):
 
     return feats, labels, camids
 
-def compute_cmc_map_in_gpu(query_feats,
-                           query_ids,
-                           gallery_feats,
-                           gallery_ids,
-                           batch_size=32092):
-
-    query_feats = query_feats.to("cuda")
-    query_ids = query_ids.to("cuda")
-    gallery_ids = gallery_ids.to("cuda")
-
-    len_gallery_feats = len(gallery_feats)
-
-    # Preallocation
-    dist       = torch.empty(len_gallery_feats, device="cuda", dtype=gallery_feats.dtype)
-    sorted_idx = torch.empty(len_gallery_feats, device='cuda', dtype=torch.int64)
-    sorted_ids = torch.empty(len_gallery_feats, device='cuda', dtype=torch.int64)
-    cmc        = torch.zeros(len(gallery_ids) , device="cuda", dtype=torch.int64)
-    all_AP     = torch.tensor(0.0, device="cuda")
-    valid_queries = torch.tensor(0, device="cuda", dtype=torch.int64)
-
-    for i in range(len(query_feats)):
-        queryf = query_feats[i:i+1]
-
-        # Cosine distance
-        for j in range(0, len_gallery_feats, batch_size):
-            galleryf = gallery_feats[j:j+batch_size].to("cuda")
-            num_moved = galleryf.shape[0]
-            sim = queryf @ galleryf.T
-            dist[j:j+num_moved] = (1 - sim).squeeze(0)
-
-        # mAP and Ranks
-        sorted_idx[:] = torch.argsort(dist)
-        sorted_ids[:] = gallery_ids[sorted_idx]
-        
-        q_id = query_ids[i].item()
-        y_true = (sorted_ids == q_id)
-        tp = torch.cumsum(y_true, dim=0)
-        total_positives = tp[-1] # total sum
-
-        if 0 == total_positives:
-            print(f"Query {q_id}@{i + 1} has no correct matches.")
-            continue
-
-        # Ranks
-        rank = torch.where(y_true)[0][0]
-        cmc[rank:] += 1
-
-        # AP
-        precision = tp / (torch.arange(len(y_true), device=y_true.device, dtype=torch.float32) + 1)
-        ap = (precision * y_true).sum() / total_positives
-
-        all_AP += ap
-        valid_queries += 1
-
-
-    if 0 == valid_queries.item():
-        raise ValueError("Invalid queries, it's highly likely that the gallery doesn't contain any query's id.")
-
-    all_AP = all_AP / valid_queries
-    cmc = cmc / valid_queries
-
-
-    cmc = cmc.cpu().numpy()
-    mAP = all_AP.cpu()
-
-    return cmc, mAP
-
-import random
-
 def load_model(cfg):
     model_filename = cfg.model
 
     if model_filename.endswith(".pb"):
+        from generate_detections import ImageEncoder
         model = ImageEncoder(model_filename)
         return model, model.image_shape
     
@@ -211,21 +132,76 @@ def load_model(cfg):
         model.eval()
         return model, (128, 64)
 
+def mean_features(feats, ids):
+
+    uniq_ids = []
+    feats_mean = []
+    dists = []
+    id_count = 0
+
+    for j in ids:
+
+        # If this was computed already move on
+        if j.item() in uniq_ids:
+            continue
+
+        id_j = ids == j
+        
+        # Filter the features
+        feats_j = feats[id_j]
+        
+        mean_feat = torch.mean(feats_j, 0, True)
+        feats_mean.append(mean_feat)
+
+        # Intra-class distance
+        dt = 1 - feats_j @ mean_feat.T
+        d = torch.mean(dt)
+        dists.append(d)
+
+        # Register the id
+        uniq_ids.append(j.item())
+
+        id_count += 1
+
+    feats_mean = torch.cat(feats_mean, dim=0)
+    dists = torch.stack(dists)
+    return uniq_ids, feats_mean, dists
+
+def inter_id_distances(anchor_feats, anchor_ids):
+    
+    dist = 1 - anchor_feats @ anchor_feats.T # Tensor: patches x ids 
+    sorted_idx = torch.argsort(dist)
+    complicated_ids = []
+    confused_with = []
+
+    for i, ai in enumerate(anchor_ids):
+        if i != sorted_idx[i, 0]:
+            complicated_ids.append(ai)
+            confused_with.append(anchor_ids[sorted_idx[i, 0].item()])
+
+    print(complicated_ids)
+    print(confused_with)
+    return complicated_ids
+
+
+def rank_ids(meanf, stdf):
+    return None
+
 def compute_metrics(cfg):
-    
     model, image_shape = load_model(cfg)
-    query, gallery, bsz = load_dataset(cfg, image_shape[:2])
-
+    dataset, bsz = load_dataset(cfg, image_shape[:2])
     feats_dim = 128
-
-    Q_feats, Q_ids, Q_cams = extract_features(model, query, feats_dim, bsz)
-    G_feats, G_ids, G_cams = extract_features(model, gallery, feats_dim, bsz)
     
-    return compute_cmc_map_in_gpu(
-            Q_feats, Q_ids,
-            G_feats, G_ids,
-            batch_size=512000)
+    print("\nExtracting features...")
+    feats, ids, _ = extract_features(model, dataset, feats_dim, bsz)
 
+    print("Computing INTRA id distances...")
+    u_ids, feats_mean, dists = mean_features(feats, ids)
+    print("Computing INTER id distances...")
+    inter_dist               = inter_id_distances(feats_mean, u_ids)
+
+    ranked_ids = rank_ids(feats_mean, feats_std)
+    
 def parse_args():
     parser = argparse.ArgumentParser("ReID feature extractor of selected IDs, this"
                                     "is used to test mAP against the mAP of the"
@@ -245,6 +221,10 @@ def parse_args():
                         help="batch size to evaluate",
                         default=512,
                         type=int)
+    parser.add_argument("--map",
+                        help="List of identities with the respective path",
+                        default="train.txt",
+                        type=str)
 
     return parser.parse_args()
 
@@ -252,4 +232,3 @@ def parse_args():
 if "__main__" == __name__:
     args = parse_args()    
     cmc, mAP = compute_metrics(args)
-    print(f"mAP: {mAP}, Rank-1: {cmc[0]}, Rank-5: {cmc[4]}, Rank-9:{cmc[9]}")
