@@ -404,6 +404,8 @@ def freeze_model(model, phase):
 
 def unfreeze_backbone(model, phase):
 
+    print("unfreezing", phase)
+
     if 6 == phase:
         __set_requires_grad([model.conv1, model.conv1_bn,
                              model.conv2, model.conv2_bn],
