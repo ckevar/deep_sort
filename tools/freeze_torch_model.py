@@ -502,6 +502,9 @@ def init_dataset(config):
                            P=config['training']['p'],
                            K=config['training']['k'])
 
+    print("matmull", torch.backends.cuda.matmul.allow_tf32)
+    print("cudnn tf32", torch.backends.cudnn.allow_tf32)
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=train_batch_sz,
