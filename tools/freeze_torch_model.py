@@ -689,13 +689,13 @@ class Criterion(torch.nn.Module):
         # Disables cross entropy at:
         if 57 == epoch:
             self.mode = 1
-        """
         # Disables Triplet loss
         if criterion_epoch == 27:
             self.mode = 0
+        """
 
         if 0 == self.mode: # cross entropy alone
-            return self.alpha * self.criterion[0](logits, labels)
+            return self.criterion[0](logits, labels)
 
         elif 1 == self.mode: # Triplet Loss alone
             return self.criterion[1](feats, labels)
