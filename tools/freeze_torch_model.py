@@ -667,12 +667,12 @@ class Criterion(torch.nn.Module):
         self.epochs = None
         self.criterion = [None, None]
 
-        if mode in ("crossentropy", "both", "combined"):
+        if mode in ("crossentropy", "combined"):
             # There was no need to add label_smoothing for MOT17
             self.criterion[0] = nn.CrossEntropyLoss(label_smoothing=0.1) 
             self.mode = 0
 
-        if mode in ("tripletloss", "both", "combined"):
+        if mode in ("tripletloss", "combined"):
             self.criterion[1] = TripletLoss(margin=cfg["triplet_margin"])
             self.mode = 1
 
@@ -681,18 +681,18 @@ class Criterion(torch.nn.Module):
             self.alpha = cfg.get("alpha", 0.15)
             self.beta = cfg.get("beta", 1.0)
 
-            #self.alpha = cfg.get("alpha", [0.15])
-            #self.beta = cfg.get("beta", [1.0])
-
         if self.mode is None:
             raise ValueError("`criterion` is required in configuration file, `tripletloss`, `crossentropy`, `both`.")
 
-    def forward(self, feats, logits, labels, epoch):
+    def forward(self, feats, logits, labels, criterion_epoch):
         """ 
         # Disables cross entropy at:
         if 57 == epoch:
             self.mode = 1
         """
+        # Disables Triplet loss
+        if criterion_epoch == 27:
+            self.mode = 0
 
         if 0 == self.mode: # cross entropy alone
             return self.criterion[0](logits, labels)
