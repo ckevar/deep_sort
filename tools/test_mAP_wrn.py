@@ -205,10 +205,12 @@ def load_model(cfg):
     elif model_filename.endswith(".pth"):
         num_classes = int(cfg.num_classes)
         model = MarsSmall128(num_classes=num_classes)
+        print("MODEL", model)
         load_torchWRN_model(model_filename, model)
         torch.set_grad_enabled(False)
         model.to("cuda")
         model.eval()
+        print("MODEL after", model)
         return model, (128, 64)
 
 def compute_metrics(cfg):
