@@ -198,6 +198,8 @@ import random
 def load_model(cfg):
     model_filename = cfg.model
 
+    print("MODEL PATH:", model_filename)
+
     if model_filename.endswith(".pb"):
         model = ImageEncoder(model_filename)
         return model, model.image_shape
