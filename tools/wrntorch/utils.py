@@ -68,7 +68,7 @@ def load_config(config_filename):
         raise ValueError("\n    Images per id K:",
                          config['training']['k'],
                          "cannot be greater than total patches per ID",
-                         config['patched_per_id'])
+                         config['patches_per_id'])
 
     return config
 
