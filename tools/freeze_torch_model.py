@@ -646,8 +646,11 @@ class TripletLoss(torch.nn.Module):
             hardest_pos = pos_dists.max() # Farthest positive
             hardest_neg = neg_dists.min() # Closest negative
 
-            triplet_loss = F.relu(hardest_pos - hardest_neg + self.margin)
-            
+            # max(0, hardest_pos - hardest_neg + margin), makes zero once it reaches the margin
+            #triplet_loss = F.relu(hardest_pos - hardest_neg + self.margin)
+            # Soft Margin
+            triplet_loss = F.softplus(hardest_pos - hardest_neg + self.margin)
+
             # Only add to the loss if the triplet is "active"
             if triplet_loss > 0:
                 loss += triplet_loss
