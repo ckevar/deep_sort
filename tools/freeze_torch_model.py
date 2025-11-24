@@ -666,12 +666,12 @@ class Criterion(torch.nn.Module):
         self.mode = None
         self.epochs = None
         self.criterion = [None, None]
+        self.alpha = cfg.get("alpha", 1.0) # Cross Entropy Weight
 
         if mode in ("crossentropy", "combined"):
             # There was no need to add label_smoothing for MOT17
             self.criterion[0] = nn.CrossEntropyLoss(label_smoothing=0.1) 
             self.mode = 0
-            self.alpha = cfg.get("alpha", 1.0)
 
         if mode in ("tripletloss", "combined"):
             self.criterion[1] = TripletLoss(margin=cfg["triplet_margin"])
