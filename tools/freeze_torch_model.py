@@ -678,7 +678,7 @@ class Criterion(torch.nn.Module):
 
         if mode in ("both", "combined"):
             self.mode = 2
-            self.alpha = cfg.get("alpha", 0.15)
+            self.alpha = cfg.get("alpha", 1.0)
             self.beta = cfg.get("beta", 1.0)
 
         if self.mode is None:
@@ -695,7 +695,7 @@ class Criterion(torch.nn.Module):
         """
 
         if 0 == self.mode: # cross entropy alone
-            return self.criterion[0](logits, labels)
+            return self.alpha * self.criterion[0](logits, labels)
 
         elif 1 == self.mode: # Triplet Loss alone
             return self.criterion[1](feats, labels)
