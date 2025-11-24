@@ -671,14 +671,14 @@ class Criterion(torch.nn.Module):
             # There was no need to add label_smoothing for MOT17
             self.criterion[0] = nn.CrossEntropyLoss(label_smoothing=0.1) 
             self.mode = 0
+            self.alpha = cfg.get("alpha", 1.0)
 
         if mode in ("tripletloss", "combined"):
             self.criterion[1] = TripletLoss(margin=cfg["triplet_margin"])
             self.mode = 1
 
-        if mode in ("both", "combined"):
+        if "combined" == mode:
             self.mode = 2
-            self.alpha = cfg.get("alpha", 1.0)
             self.beta = cfg.get("beta", 1.0)
 
         if self.mode is None:
