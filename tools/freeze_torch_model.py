@@ -3,19 +3,37 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from wrntorch.utils import (
-    save_torchWRN_checkpoint, 
-    load_torchWRN_checkpoint, 
-    load_torchWRN_model, 
-    load_torchWRN_finetuning,
-    load_config,
-    save_config,
-    init_logs,
-    mk_metrics,
-    save_metrics
-    )
+import sys
 
-from wrntorch.dataset import ReIDListDataset
+if sys.path[0].endswith("/tools"):
+    from wrntorch.utils import (
+        save_torchWRN_checkpoint, 
+        load_torchWRN_checkpoint, 
+        load_torchWRN_model, 
+        load_torchWRN_finetuning,
+        load_config,
+        save_config,
+        init_logs,
+        mk_metrics,
+        save_metrics
+        )
+
+    from wrntorch.dataset import ReIDListDataset
+else:
+    from .wrntorch.utils import (
+        save_torchWRN_checkpoint, 
+        load_torchWRN_checkpoint, 
+        load_torchWRN_model, 
+        load_torchWRN_finetuning,
+        load_config,
+        save_config,
+        init_logs,
+        mk_metrics,
+        save_metrics
+        )
+
+    from .wrntorch.dataset import ReIDListDataset
+
 
 """# Model """
 
@@ -647,9 +665,9 @@ class TripletLoss(torch.nn.Module):
             hardest_neg = neg_dists.min() # Closest negative
 
             # max(0, hardest_pos - hardest_neg + margin), makes zero once it reaches the margin
-            #triplet_loss = F.relu(hardest_pos - hardest_neg + self.margin)
+            triplet_loss = F.relu(hardest_pos - hardest_neg + self.margin)
             # Soft Margin
-            triplet_loss = F.softplus(hardest_pos - hardest_neg)
+            #triplet_loss = F.softplus(hardest_pos - hardest_neg)
 
             # Only add to the loss if the triplet is "active"
             if triplet_loss > 0:

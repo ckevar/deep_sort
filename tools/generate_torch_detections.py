@@ -1,6 +1,13 @@
-from freeze_torch_model import MarsSmall128
-from freeze_torch_model import load_torchWRN_model
-from generate_detections import extract_image_patch
+import sys
+
+if sys.path[0].endswith("/tools"):
+    from freeze_torch_model import MarsSmall128
+    from freeze_torch_model import load_torchWRN_model
+    from generate_detections import extract_image_patch
+else:
+    from .freeze_torch_model import MarsSmall128
+    from .freeze_torch_model import load_torchWRN_model
+    from .generate_detections import extract_image_patch
 
 import numpy as np
 import torch
