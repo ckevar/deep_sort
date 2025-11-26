@@ -1,5 +1,5 @@
 plotc() {
-  COL="$1"
+  local COL="$1"
   shift 1
 
   PLOT_CMD="set grid"
@@ -24,29 +24,43 @@ plotc() {
 }
 
 _help() {
-  echo "./gather_metrics_HF.sh <task> <directory>"
-  echo " "
-  echo "The following tasks are available"
-  echo "  - 'download-<experiment>-<dataset>'"
-  echo "  - 'plot-<experiment>-<dataset>'"
-  echo "  - 'blacklist-<experiment>-<dataset>'"
+  echo "Usage: $0 <task> [arguments]"
   echo ""
-  echo "Where <experiment> is:"
-  echo "  - lr: Establishing the learning rate and phase"
-  echo "  - pk: Establishing the PK sampler parameters"
-  echo "  - lrsmtl: learning rate, loss using softmax + triplet loss"
-  echo "  - lrcls: learning rate, loss using logits (or classification) only"
-  echo "  - lrufb: learning rate, loss using logits + triplet loss an fully unfreezing the backbone"
-  echo "  - lrufbp: learning rate, loss using logits + triplet loss and unfreezing res mod 4 and mod 5 only and changing lr upon unfreezing"
-  echo "  - seed: picking the best seed."
-  echo " "
-  echo "<dataset>:"
-  echo "  - mot17: MOT17 dataset."
-  echo "  - kitti: KITTI dataset."
-  echo "  - waymov2: WaymoV2 dataset."
+  echo "task:"
+  echo "  - 'plotc-<column> <*.dat files with metrics>'"
+  echo "  - 'download-<experiment>-<dataset>' not implemented"
+  echo ""
 
 }
 
+download_metrics () {
+  local DATASET="$1"
+  local EXP_NAME="$2"
+  local ROOT_PATH="${3:-default}"
+  local EXP_ID="$4"
+
+  ROOT_PATH="$ROOT_PATH/$DATASET.d/$EXP_ID-$EXP_NAME"
+  BASE_URL="https://huggingface.co/ckevar/wrn-deepSORT/resolve/main/$DATASET-$EXP_NAME"
+
+  wget -q "$BASE_URL/experiments.txt" -O "$ROOT_PATH/experiments.txt"
+  FETCH_FLAG=1
+
+  while read RUN_NAME; do
+    RESULT_PATH="$ROOT_PATH/logs/$RUN_NAME"
+
+    if [ ! -f "$RESULT_PATH/results.dat" ]; then
+      echo "Downloading $RUN_NAME"
+      wget -q "$BASE_URL/logs/$RUN_NAME/results.dat" -O "$RESULT_PATH/results.dat"
+      FETCH_FLAG=0
+    fi
+
+  done < "$ROOT_PATH/experiments.txt"
+
+  if [ $FETCH_FLAG ]; then
+    echo "All fetched nothing to do."
+  fi
+
+}
 
 
 if [ -z "$2" ]; then
@@ -55,19 +69,33 @@ if [ -z "$2" ]; then
   exit 1
 fi
 
-IFS="-" read TASK EXP_ID DATASET_ID < <(echo "$1")
+IFS="-" read TASK ARG0 ARG1 < <(echo "$1")
 shift 1
-if [ -z "$EXP_ID" ]; then
-  printf "You need to specify an experiment name.\n"
+if [ -z "$ARG0" ]; then
+  printf "You need to specify an experiment name or column to draw\n"
   print_help
   exit 1
 fi
 
-if [ "plotc" = "$TASK" ]; then
-  plotc "$EXP_ID" "$@"
+case $TASK in
+  "plotc")
+    plotc "$ARG0" "$@"
+    ;;
+  
+  "fetch")
+    download_metrics $ARG0 $ARG1 "$@"
+    ;;
 
-# HELP
-else
-  _help
-fi
+  "help"|"-h"|"--help")
+    _help
+    ;;
+  *)
+    _help
+    if [ -n $TASK ]; then
+      echo ""
+      echo "Error: Unknow task $TASK"
+      exit 1
+    fi
+    ;;
+esac
 
