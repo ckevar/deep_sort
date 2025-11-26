@@ -737,16 +737,16 @@ class Criterion(torch.nn.Module):
 """## training utils | Schedulers """
 def attempt_unfreeze_backbone(model, optimizer, curr_epoch, cfg):
 
+    if curr_epoch not in cfg["uepoch"]:
+        return
 
     for i, e in enumerate(cfg["uepoch"]):
         if e != curr_epoch:
             continue
+
         unfreeze_backbone(model, e)
 
-        if cfg["ulr"] is None:
-            continue
-
-        if "None" == cfg["ulr"][i]:
+        if cfg["ulr"] is None and "None" == cfg["ulr"][i]:
             continue
 
         for param_group in optimizer.param_groups:
