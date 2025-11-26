@@ -743,8 +743,8 @@ def attempt_unfreeze_backbone(model, optimizer, curr_epoch, cfg):
     for i, e in enumerate(cfg["uepoch"]):
         if e != curr_epoch:
             continue
-
-        unfreeze_backbone(model, e)
+        
+        unfreeze_backbone(model, cfg["uphase"][i])
 
         if cfg["ulr"] is None:
             continue
