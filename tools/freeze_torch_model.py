@@ -746,7 +746,10 @@ def attempt_unfreeze_backbone(model, optimizer, curr_epoch, cfg):
 
         unfreeze_backbone(model, e)
 
-        if cfg["ulr"] is None and "None" == cfg["ulr"][i]:
+        if cfg["ulr"] is None:
+            continue
+
+        if "None" == cfg["ulr"][i]:
             continue
 
         for param_group in optimizer.param_groups:

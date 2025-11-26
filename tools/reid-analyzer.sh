@@ -12,6 +12,11 @@ plotc() {
 
   for DATA in "${@}"; do
 
+    if [ ! -f "$DATA" ]; then
+      echo "Cannot find file '$DATA'"
+      continue
+    fi
+
     # NOTE: If we are operating under the following file structure:
     # `experiments/dataset.d/group/logs/exp_id/results.dat`, then, the following 
     # line should be able to parse it.
@@ -57,6 +62,7 @@ download_metrics () {
 
     if [ ! -f "$RESULT_PATH/results.dat" ]; then
       echo "Downloading $RUN_NAME"
+      mkdir -p "$RESULT_PATH"
       wget -q "$BASE_URL/logs/$RUN_NAME/results.dat" -O "$RESULT_PATH/results.dat"
       FETCH_FLAG=0
     fi
