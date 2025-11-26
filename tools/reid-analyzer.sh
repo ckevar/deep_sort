@@ -7,6 +7,7 @@ plotc() {
     PLOT_CMD="$PLOT_CMD; set key bottom"
   fi
   PLOT_CMD="$PLOT_CMD; plot"
+  MAX_PEAK_VAL="0.0"
 
 
   for DATA in "${@}"; do
@@ -17,7 +18,13 @@ plotc() {
     IFS="/" read _ _ _GROUP _ _EXP _ < <(echo "$DATA")
     TITLE="$_GROUP/$_EXP"
     PLOT_CMD="$PLOT_CMD '$DATA' u 1:$COL w l title '$TITLE',"
+
+
+    MAX_PEAK_VAL=$(awk -vMAX="$MAX_PEAK_VAL" 'NR > 1 && $3 > MAX {MAX = $3} END {print MAX}' "$DATA")
+
   done
+
+  echo "PEAK $MAX_PEAK_VAL"
   echo "GNUPLOT CMD EXECUTED"
   echo "$PLOT_CMD"
   gnuplot -p -e "$PLOT_CMD"
