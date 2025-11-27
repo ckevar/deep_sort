@@ -753,25 +753,8 @@ def attempt_unfreeze_backbone(model, optimizer, curr_epoch, cfg):
             continue
 
         for param_group in optimizer.param_groups:
-            param_group["lr"] = cfg["ulr"][i]
+            param_group["lr"] *= cfg["ulr"][i]
     
-    """
-    if curr_epoch not in cfg["uepoch"]:
-        return
-
-    idx_cfg = cfg["uepoch"].index(curr_epoch)
-    unfreeze_backbone(model, cfg["uphase"][idx_cfg])
-    
-    if cfg["ulr"] is None:
-        return
-
-    if "None" == cfg["ulr"][idx_cfg]:
-        return
-
-    for param_group in optimizer.param_groups:
-        param_group["lr"] = cfg["ulr"][idx_cfg]
-    """
-
 def attempt_update_lr(model, opt, epoch, lr_scheduling, lr_schedule_at):
 
     if epoch not in lr_schedule_at:

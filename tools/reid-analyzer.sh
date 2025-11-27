@@ -28,8 +28,9 @@ plotc() {
     MAX_PEAK_VAL=$(awk -vMAX="$MAX_PEAK_VAL" 'NR > 1 && $3 > MAX {MAX = $3} END {print MAX}' "$DATA")
 
   done
-
-  echo "PEAK $MAX_PEAK_VAL"
+  
+  echo ""
+  echo "PEAK mAP: $MAX_PEAK_VAL"
   echo "GNUPLOT CMD EXECUTED"
   echo "$PLOT_CMD"
   gnuplot -p -e "$PLOT_CMD"
@@ -62,7 +63,7 @@ download_metrics () {
     RESULT_PATH="$ROOT_PATH/logs/$RUN_NAME"
 
     if [ ! -f "$RESULT_PATH/results.dat" ]; then
-      echo "Downloading $RUN_NAME..."
+      echo "Downloading experiment name $RUN_NAME..."
       mkdir -p "$RESULT_PATH"
       wget -q "$BASE_URL/logs/$RUN_NAME/results.dat" -O "$RESULT_PATH/results.dat"
       FETCH_FLAG=0
@@ -74,7 +75,7 @@ download_metrics () {
     echo ""
     echo "All fetched nothing to do."
   else
-    echo "done"
+    echo "All done."
     echo ""
   fi
 
