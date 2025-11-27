@@ -54,6 +54,7 @@ download_metrics () {
   ROOT_PATH="$ROOT_PATH/$DATASET.d/$EXP_ID-$EXP_NAME"
   BASE_URL="https://huggingface.co/ckevar/wrn-deepSORT/resolve/main/$DATASET-$EXP_NAME"
 
+  mkdir -p "$ROOT_PATH"
   wget -q "$BASE_URL/experiments.txt" -O "$ROOT_PATH/experiments.txt"
   FETCH_FLAG=1
 
@@ -61,7 +62,7 @@ download_metrics () {
     RESULT_PATH="$ROOT_PATH/logs/$RUN_NAME"
 
     if [ ! -f "$RESULT_PATH/results.dat" ]; then
-      echo "Downloading $RUN_NAME"
+      echo "Downloading $RUN_NAME..."
       mkdir -p "$RESULT_PATH"
       wget -q "$BASE_URL/logs/$RUN_NAME/results.dat" -O "$RESULT_PATH/results.dat"
       FETCH_FLAG=0
@@ -69,8 +70,12 @@ download_metrics () {
 
   done < "$ROOT_PATH/experiments.txt"
 
-  if [ $FETCH_FLAG ]; then
+  if [ $FETCH_FLAG -eq 1 ]; then
+    echo ""
     echo "All fetched nothing to do."
+  else
+    echo "done"
+    echo ""
   fi
 
 }
