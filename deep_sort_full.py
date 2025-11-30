@@ -35,6 +35,7 @@ def load_feature_extractor(feature_extractor_file):
         elif "kitti" in feature_extractor_file: train_ids = 451
         elif "waymo" in feature_extractor_file: train_ids = 20982
         else: raise ValueError(f"Model {feature_extractor_file} not supported, unknow train_ids.\n")
+
         return create_box_encoder(feature_extractor_file, train_ids, batch_size=128)
 
     else:
@@ -171,6 +172,7 @@ def run(sequence_dir, data_type, detector, feature_extractor,
     seq_info = gather_sequence_info(sequence_dir, data_type)
     metric = nn_matching.NearestNeighborDistanceMetric(
         "cosine", max_cosine_distance, nn_budget)
+
     tracker = Tracker(metric)
     results = []
     total_et = 0

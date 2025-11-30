@@ -1,5 +1,4 @@
 import argparse
-from generate_detections import ImageEncoder
 import os
 from torch.utils.data import Dataset, DataLoader
 import torch
@@ -199,6 +198,7 @@ def load_model(cfg):
     model_filename = cfg.model
 
     if model_filename.endswith(".pb"):
+        from generate_detections import ImageEncoder
         model = ImageEncoder(model_filename)
         return model, model.image_shape
     

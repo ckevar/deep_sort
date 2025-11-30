@@ -133,6 +133,30 @@ def load_model(cfg):
         return model, (128, 64)
 
 
+def fixed_features(feats, ids):
+    uniq_ids, inverse_indices = torch.unique(ids, return_inverse=True)
+    uniq_idx = torch.unique(inverse_indices)
+    num_groups = uniq_ids.size(0)
+
+    counts = torch.bincount(inverse_indices).float().unsqueeze(1)
+
+    feats_mean = feats[uniq_idx]
+    expanded_means = feats_mean[inverse_indices]
+    dot_product = (feats * expanded_means).sum(1)
+    row_distances = 1 - dot_product
+
+    sum_dist = torch.zeros(num_groups, device=feats.device, dtype=feats.dtype)
+    sum_dist.index_add_(0, inverse_indices, row_distances)
+
+    dists = sum_dist / counts.squeeze()
+
+    sorted_idx = torch.argsort(dists, descending=True)
+    uniq_ids = uniq_ids[sorted_idx]
+    feats_mean = feats_mean[sorted_idx]
+    dists = dists[sorted_idx]
+
+    return uniq_ids, feats_mean, dists
+
 def mean_features_vectorized(feats, ids):
     uniq_ids, inverse_indices = torch.unique(ids, return_inverse=True)
     num_groups = uniq_ids.size(0)
@@ -255,7 +279,8 @@ def mine_hard_ids(cfg):
     feats, ids, _ = extract_features(model, dataset, feats_dim, bsz)
 
     print("Computing INTRA id distances...")
-    u_ids, feats_mean, dists = mean_features_vectorized(feats, ids)
+    #u_ids, feats_mean, dists = mean_features_vectorized(feats, ids)
+    u_ids, feats_mean, dists = fixed_features(feats, ids)
 
     print("Computing INTER id distances...")
     confused_ids, distractor_ids, confusing_dist =  inter_id_distances_vectorized(feats_mean, u_ids)
