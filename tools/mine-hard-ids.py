@@ -279,8 +279,8 @@ def mine_hard_ids(cfg):
     feats, ids, _ = extract_features(model, dataset, feats_dim, bsz)
 
     print("Computing INTRA id distances...")
-    #u_ids, feats_mean, dists = mean_features_vectorized(feats, ids)
-    u_ids, feats_mean, dists = fixed_features(feats, ids)
+    u_ids, feats_mean, dists = mean_features_vectorized(feats, ids)
+    #u_ids, feats_mean, dists = fixed_features(feats, ids)
 
     print("Computing INTER id distances...")
     confused_ids, distractor_ids, confusing_dist =  inter_id_distances_vectorized(feats_mean, u_ids)

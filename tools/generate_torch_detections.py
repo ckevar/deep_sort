@@ -29,8 +29,6 @@ def __run_in_batches__(model, x, data_len, batch_size):
         if e < data_len:
             batch_data = x[e:, :, :, :]
             batch_data = batch_data.cuda()
-            print(x.shape)
-            exit(1)
             feats = model(batch_data, return_embedding=True)
             all_feats.append(feats.cpu())
 
