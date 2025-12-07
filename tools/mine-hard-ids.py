@@ -132,7 +132,6 @@ def load_model(cfg):
         model.eval()
         return model, (128, 64)
 
-
 def fixed_features(feats, ids):
     uniq_ids, inverse_indices = torch.unique(ids, return_inverse=True)
     uniq_idx = torch.unique(inverse_indices)
@@ -161,70 +160,42 @@ def mean_features_vectorized(feats, ids):
     uniq_ids, inverse_indices = torch.unique(ids, return_inverse=True)
     num_groups = uniq_ids.size(0)
 
+    # -- Centered Features -- #
     sum_feats = torch.zeros(num_groups, feats.size(1), device=feats.device, dtype=feats.dtype)
     sum_feats.index_add_(0, inverse_indices, feats)
 
     counts = torch.bincount(inverse_indices).float().unsqueeze(1)
 
     feats_mean = sum_feats / counts
+    
+    # -- Compute Distances -- #
     expanded_means = feats_mean[inverse_indices]
     dot_product = (feats * expanded_means).sum(1)
     row_distances = 1 - dot_product
 
+    # -- Average, min, max distance -- #
     sum_dist = torch.zeros(num_groups, device=feats.device, dtype=feats.dtype)
+    max_dist = torch.empty(num_groups, device=feats.device, dtype=feats.dtype)
+    min_dist = torch.empty(num_groups, device=feats.device, dtype=feats.dtype)
+
+    max_dist.fill_(float('-inf'))
+    min_dist.fill_(float('inf'))
+
     sum_dist.index_add_(0, inverse_indices, row_distances)
+    max_dist.scatter_reduce_(0, inverse_indices, row_distances, reduce='amax', include_self=False)
+    min_dist.scatter_reduce_(0, inverse_indices, row_distances, reduce='amin', include_self=False)
 
     dists = sum_dist / counts.squeeze()
 
+    # -- Sort IDs by average distances -- #
     sorted_idx = torch.argsort(dists, descending=True)
     uniq_ids = uniq_ids[sorted_idx]
     feats_mean = feats_mean[sorted_idx]
-    dists = dists[sorted_idx]
+    dists    = dists[sorted_idx]
+    min_dist = min_dist[sorted_idx]
+    max_dist = max_dist[sorted_idx]
 
-    return uniq_ids, feats_mean, dists
-
-def mean_features(feats, ids):
-
-    uniq_ids   = []
-    feats_mean = []
-    dists      = []
-    id_count   = 0
-
-    for j in ids:
-
-        # If this was computed already move on
-        if j.item() in uniq_ids:
-            continue
-
-        id_j = ids == j
-        
-        # Filter the features
-        feats_j = feats[id_j]
-        
-        mean_feat = torch.mean(feats_j, 0, True)
-        feats_mean.append(mean_feat)
-
-        # Intra-class distance
-        dt = 1 - feats_j @ mean_feat.T
-        d = torch.mean(dt)
-        dists.append(d)
-
-        # Register the id
-        uniq_ids.append(j)
-
-        id_count += 1
-
-    feats_mean = torch.cat(feats_mean, dim=0).to("cuda")
-    dists      = torch.stack(dists).to("cuda")
-    uniq_ids   = torch.stack(uniq_ids).to("cuda")
-
-    sorted_idx = torch.argsort(dists, descending=True)
-    uniq_ids   = uniq_ids[sorted_idx]
-    feats_mean = feats_mean[sorted_idx]
-    dists      = dists[sorted_idx]
-
-    return uniq_ids, feats_mean, dists
-
+    return uniq_ids, feats_mean, dists, min_dist, max_dist
 
 def inter_id_distances_vectorized(anchor_feats, anchor_ids):
     dist = 1 - anchor_feats @ anchor_feats.T # Tensor: patches x ids 
@@ -258,14 +229,14 @@ def inter_id_distances(anchor_feats, anchor_ids):
     return confused_ids, distractor_ids, confusing_dist
 
 
-def save_intra(path, mapf, ids, dists):
-    filename = f"{path}/{mapf}-intra-dist-vec.txt"
+def save_intra(outfile, ids, dists, min_d, max_d):
+    filename = f"{outfile}-intra_dist.txt"
     with open(filename, 'w') as fd:
-        for i, d in zip(ids, dists):
-            fd.write(f"{i} {d:.6f}\n")
+        for i, d, md, MD in zip(ids, dists, min_d, max_d):
+            fd.write(f"{i} {d:.6f} {md:.6f} {MD:.6f}\n")
 
-def save_inter(path, mapf, c_ids, d_ids, dists):
-    filename = f"{path}/{mapf}-inter-dist-vec.txt"
+def save_inter(outfile, c_ids, d_ids, dists):
+    filename = f"{outfile}-inter_dist.txt"
     with open(filename, 'w') as fd:
         for ci, di, dd in zip(c_ids, d_ids, dists):
             fd.write(f"{ci} {di} {dd:.6f}\n")
@@ -278,28 +249,40 @@ def mine_hard_ids(cfg):
     print("\nExtracting features...")
     feats, ids, _ = extract_features(model, dataset, feats_dim, bsz)
 
-    print("Computing INTRA id distances...")
-    u_ids, feats_mean, dists = mean_features_vectorized(feats, ids)
-    #u_ids, feats_mean, dists = fixed_features(feats, ids)
+    print("Computing intra id distances...")
+    u_ids, feats_mean, dists, min_d, max_d = mean_features_vectorized(feats, ids)
 
-    print("Computing INTER id distances...")
+    print("Computing inter id distances...")
     confused_ids, distractor_ids, confusing_dist =  inter_id_distances_vectorized(feats_mean, u_ids)
 
-    print("storing...")
+    print("Storing...")
     u_ids = u_ids.to("cpu").numpy()
     dists = dists.to("cpu").numpy()
+    min_d = min_d.to("cpu").numpy()
+    max_d = max_d.to("cpu").numpy()
     confused_ids = confused_ids.to("cpu").numpy()
     distractor_ids = distractor_ids.to("cpu").numpy()
     confusing_dist = confusing_dist.to("cpu").numpy()
 
-    save_intra(cfg.dataset, cfg.map, u_ids, dists)
-    save_inter(cfg.dataset, cfg.map, confused_ids, distractor_ids, confusing_dist)
+    save_intra(cfg.out_file, u_ids, dists, min_d, max_d)
+    save_inter(cfg.out_file, confused_ids, distractor_ids, confusing_dist)
 
-    
+def get_basename(filename_plus_extension):
+    fe = filename_plus_extension.split(".")
+    ext = fe[1]
+    basename = fe[0]
+    if basename is None:
+        print("Filename seems wrong. Saving with temporary Name 'tmp'")
+        basename = tmp
+
+    return basename
+
 def parse_args():
-    parser = argparse.ArgumentParser("ReID feature extractor of selected IDs, this"
-                                    "is used to test mAP against the mAP of the"
-                                    "multiclass-trained model")
+    parser = argparse.ArgumentParser(
+            "ReID feature extractor of selected IDs, this is used to test mAP "
+            "against the mAP of the multiclass-trained model."
+            )
+    
     parser.add_argument("--model",
                         help="Path to frozen inference fraph protobuf.",
                         required=True)
@@ -309,19 +292,42 @@ def parse_args():
                         required=True)
 
     parser.add_argument("--num_classes",
-                        help="Number of classes, optional, only for the torch version.",
+                        help="Number of classes, optional, only for the torch "\
+                             "version.",
                         default=1)
+    
     parser.add_argument("--batch_sz",
                         help="batch size to evaluate",
                         default=512,
                         type=int)
+    
     parser.add_argument("--map",
                         help="List of identities with the respective path",
                         default="train.txt",
                         type=str)
 
-    return parser.parse_args()
+    parser.add_argument("--experiment_name",
+                        help="experiment name templated: <words_separated_by_underscore>."\
+                             " default name: 'default'",
+                        default="default",
+                        type=str)
 
+    parser.add_argument("--out_dir",
+                        help="output directory, by the default it will save in " \
+                             "the same directory where the dataset is.",
+                        default="None",
+                        type=str)
+
+    args = parser.parse_args()
+    
+    # -- Experiment output -- #
+    if "None" == args.out_dir:
+        args.out_dir = args.dataset
+
+    map_file = get_basename(args.map)
+    args.out_file = f"{args.out_dir}/{map_file}-{args.experiment_name}"
+
+    return args
 
 if "__main__" == __name__:
     args = parse_args()    

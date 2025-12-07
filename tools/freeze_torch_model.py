@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 import sys
 
-if sys.path[0].endswith("/tools"):
+if sys.path[0].endswith("/tools") or sys.path[-1].endswith("/tools"):
     from wrntorch.utils import (
         save_torchWRN_checkpoint, 
         load_torchWRN_checkpoint, 

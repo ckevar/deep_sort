@@ -5,7 +5,10 @@ plotc() {
   PLOT_CMD="set grid"
   if [ "2" != "$COL" ]; then
     PLOT_CMD="$PLOT_CMD; set key bottom"
+  else
+    PLOT_CMD="$PLOT_CMD; set logscale x"
   fi
+
   PLOT_CMD="$PLOT_CMD; plot"
   MAX_PEAK_VAL="0.0"
 

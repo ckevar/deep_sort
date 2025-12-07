@@ -1,6 +1,6 @@
 import sys
 
-if sys.path[0].endswith("/tools"):
+if sys.path[0].endswith("/tools") or sys.path[-1].endswith("/tools"):
     from freeze_torch_model import MarsSmall128
     from freeze_torch_model import load_torchWRN_model
     from generate_detections import extract_image_patch
