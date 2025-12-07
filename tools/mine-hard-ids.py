@@ -123,7 +123,7 @@ def load_model(cfg):
         model = ImageEncoder(model_filename)
         return model, model.image_shape
     
-    elif model_filename.endswith(".pth"):
+    elif model_filename.endswith(".pth") or model_filename.endswith(".pth_best"):
         num_classes = int(cfg.num_classes)
         model = MarsSmall128(num_classes=num_classes)
         load_torchWRN_model(model_filename, model)
