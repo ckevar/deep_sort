@@ -62,10 +62,6 @@ class ToNumpyUint8:
         return arr
 
 def load_dataset(cfg, image_shape):
-    path = cfg.dataset
-    batch_size = cfg.batch_sz
-    map_file = cfg.map
-
     model_file =  cfg.model
 
     if model_file.endswith(".pb"):
@@ -80,11 +76,14 @@ def load_dataset(cfg, image_shape):
             transforms.Lambda(lambda x:x*255),
         ])
 
+    path = cfg.dataset
+    dataset = ReIDListDataset(path, 
+                              f"{path}/{cfg.map}", 
+                              transform=trans_qg, 
+                              relabel=False)
+    loader = DataLoader(dataset, batch_size=cfg.batch_sz)
 
-    dataset = ReIDListDataset(path, f"{path}/{map_file}", transform=trans_qg, relabel=False)
-    loader = DataLoader(dataset, batch_size=batch_size)
-
-    return loader, batch_size
+    return loader
 
 def extract_features(model, loader, feat_dim, batch_sz):
     n_samples = len(loader.dataset)
@@ -243,11 +242,11 @@ def save_inter(outfile, c_ids, d_ids, dists):
 
 def mine_hard_ids(cfg):
     model, image_shape = load_model(cfg)
-    dataset, bsz = load_dataset(cfg, image_shape[:2])
+    dataset = load_dataset(cfg, image_shape[:2])
     feats_dim = 128
     
     print("\nExtracting features...")
-    feats, ids, _ = extract_features(model, dataset, feats_dim, bsz)
+    feats, ids, _ = extract_features(model, dataset, feats_dim, cfg.batch_sz)
 
     print("Computing intra id distances...")
     u_ids, feats_mean, dists, min_d, max_d = mean_features_vectorized(feats, ids)
@@ -272,8 +271,8 @@ def get_basename(filename_plus_extension):
     ext = fe[1]
     basename = fe[0]
     if basename is None:
-        print("Filename seems wrong. Saving with temporary Name 'tmp'")
-        basename = tmp
+        print(f"Filename {basename} seems off. Saving with temporary name 'tmp'")
+        basename = "tmp"
 
     return basename
 
@@ -315,13 +314,13 @@ def parse_args():
     parser.add_argument("--out_dir",
                         help="output directory, by the default it will save in " \
                              "the same directory where the dataset is.",
-                        default="None",
+                        default=None,
                         type=str)
 
     args = parser.parse_args()
     
     # -- Experiment output -- #
-    if "None" == args.out_dir:
+    if args.out_dir is None:
         args.out_dir = args.dataset
 
     map_file = get_basename(args.map)
