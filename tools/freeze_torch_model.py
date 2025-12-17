@@ -295,7 +295,7 @@ def compute_cmc_map_in_gpu(query_feats,
 
     gallery_in_cpu = 1
     if batch_size == 0:
-        gallery_feats = gallery_feats.to("cpu")
+        gallery_feats = gallery_feats.to("cuda")
         batch_size = len_gallery_feats
         gallery_in_cpu = 0
 
