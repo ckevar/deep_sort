@@ -280,9 +280,12 @@ def compute_cmc_map_in_gpu(query_feats,
                            gallery_feats,
                            gallery_ids,
                            gallery_cams,
-                           batch_size=32092):
+                           batch_size=0):
 
     # Legacy: gallery_ids = gallery_ids.cpu().numpy() # Leave at GPU
+    len_gallery_feats = len(gallery_feats)
+    len_query_feats = len(query_feats)
+
     query_feats = query_feats.to("cuda")
     query_ids = query_ids.to("cuda")
     gallery_ids = gallery_ids.to("cuda")
@@ -290,27 +293,34 @@ def compute_cmc_map_in_gpu(query_feats,
     if gallery_cams is not None:
         gallery_cams = gallery_cams.cpu().numpy()
 
-    len_gallery_feats = len(gallery_feats)
+    gallery_in_cpu = 1
+    if batch_size == 0:
+        gallery_feats = gallery_feats.to("cpu")
+        batch_size = len_gallery_feats
+        gallery_in_cpu = 0
 
-    dists_gpu = torch.empty(len_gallery_feats, device="cuda", dtype=gallery_feats.dtype)
-    sorted_idx_gpu = torch.empty(len_gallery_feats, device="cuda", dtype=torch.int64)
-    cmc_gpu = torch.zeros(len(gallery_ids), device="cuda", dtype=torch.int64)
-    all_AP_gpu = torch.tensor(0.0, device="cuda")  # float32 by default
-    valid_queries_gpu = torch.tensor(0, device="cuda", dtype=torch.int64)
+
+    dists         = torch.empty(len_gallery_feats, device="cuda", dtype=gallery_feats.dtype)
+    sorted_idx    = torch.empty(len_gallery_feats, device="cuda", dtype=torch.int64)
+    cmc           = torch.zeros(len(gallery_ids), device="cuda", dtype=torch.int64)
+    all_AP        = torch.tensor(0.0, device="cuda")  # float32 by default
+    valid_queries = torch.tensor(0, device="cuda", dtype=torch.int64)
 
     for i in range(len(query_feats)):
         queryf = query_feats[i:i+1]
 
         # Cosine Distance in GPU
         for j in range(0, len_gallery_feats, batch_size):
-            galleryf = gallery_feats[j:j+batch_size].to("cuda")
+            galleryf = gallery_feats[j:j+batch_size]
+            if gallery_in_cpu:
+                galleryf = galleryf.to("cuda")
             num_moved = galleryf.shape[0]
             sim = queryf @ galleryf.T
-            dists_gpu[j:j+num_moved] = (1 - sim).squeeze(0)
+            dists[j:j+num_moved] = (1 - sim).squeeze(0)
 
         # Compute mAP and Ranks
-        sorted_idx_gpu = torch.argsort(dists_gpu)
-        sorted_ids = gallery_ids[sorted_idx_gpu]
+        sorted_idx[:] = torch.argsort(dists)
+        sorted_ids = gallery_ids[sorted_idx]
 
         q_id = query_ids[i].item()
 
@@ -324,23 +334,23 @@ def compute_cmc_map_in_gpu(query_feats,
 
         # Ranks
         rank_gpu = torch.where(y_true_gpu)[0][0]
-        cmc_gpu[rank_gpu:] += 1
+        cmc[rank_gpu:] += 1
 
         # AP
         precision = tp / (torch.arange(len(y_true_gpu), device=y_true_gpu.device, dtype=torch.float32) + 1)
         ap_gpu = (precision * y_true_gpu).sum() / total_positives
-        all_AP_gpu = all_AP_gpu + ap_gpu
+        all_AP= all_AP+ ap_gpu
 
-        valid_queries_gpu += 1
+        valid_queries+= 1
 
-    if 0 == valid_queries_gpu.item():
+    if 0 == valid_queries.item():
         raise ValueError("Invalid queries. It's highly likely that the gallery doesn't contain any query's id")
 
-    all_AP_gpu = all_AP_gpu / valid_queries_gpu
-    cmc_gpu = cmc_gpu / valid_queries_gpu
+    all_AP= all_AP/ valid_queries
+    cmc = cmc / valid_queries
 
-    cmc = cmc_gpu.cpu().numpy()
-    mAP  = all_AP_gpu.cpu()
+    cmc = cmc.cpu().numpy()
+    mAP  = all_AP.cpu()
 
     return cmc, mAP
 
@@ -379,10 +389,10 @@ def evaluate_mAP_CMCD(config, model, feat_dims):
     query_feats, query_ids, query_cams = extract_features(model, query_loader, feat_dims)
     gallery_feats, gallery_ids, gallery_cams = extract_features(model, gallery_loader, feat_dims)
 
+    # NOTE: The batch size might change in here if the GPU is not big enough
     return compute_cmc_map_in_gpu(
       query_feats, query_ids, query_cams,
       gallery_feats, gallery_ids, gallery_cams,
-      batch_size=512000
     )
 
 """# Training Utils"""

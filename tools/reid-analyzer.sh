@@ -6,7 +6,8 @@ plotc() {
   if [ "2" != "$COL" ]; then
     PLOT_CMD="$PLOT_CMD; set key bottom"
   else
-    PLOT_CMD="$PLOT_CMD; set logscale x"
+    #PLOT_CMD="$PLOT_CMD; set logscale x"
+    PLOT_CMD="$PLOT_CMD;"
   fi
 
   PLOT_CMD="$PLOT_CMD; plot"
