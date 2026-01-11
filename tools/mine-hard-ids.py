@@ -155,7 +155,7 @@ def fixed_features(feats, ids):
 
     return uniq_ids, feats_mean, dists
 
-def mean_features_vectorized(feats, ids):
+def mean_features_vectorized(feats, ids, penalized=False):
     uniq_ids, inverse_indices = torch.unique(ids, return_inverse=True)
     num_groups = uniq_ids.size(0)
 
@@ -166,6 +166,8 @@ def mean_features_vectorized(feats, ids):
     counts = torch.bincount(inverse_indices).float().unsqueeze(1)
 
     feats_mean = sum_feats / counts
+    if not penalized:
+        feats_mean = torch.nn.functional.normalize(feats_mean, p=2, dim=1)
     
     # -- Compute Distances -- #
     expanded_means = feats_mean[inverse_indices]
@@ -193,6 +195,9 @@ def mean_features_vectorized(feats, ids):
     dists    = dists[sorted_idx]
     min_dist = min_dist[sorted_idx]
     max_dist = max_dist[sorted_idx]
+
+    if penalized:
+        feats_mean = torch.nn.functional.normalize(feats_mean, p=2, dim=1)
 
     return uniq_ids, feats_mean, dists, min_dist, max_dist
 
@@ -228,8 +233,13 @@ def inter_id_distances(anchor_feats, anchor_ids):
     return confused_ids, distractor_ids, confusing_dist
 
 
-def save_intra(outfile, ids, dists, min_d, max_d):
-    filename = f"{outfile}-intra_dist.txt"
+def save_intra(outfile, ids, dists, min_d, max_d, penalized=False):
+    
+    if penalized:
+        filename = f"{outfile}-intra_dist-penalized.txt"
+    else:
+        filename = f"{outfile}-intra_dist.txt"
+
     with open(filename, 'w') as fd:
         for i, d, md, MD in zip(ids, dists, min_d, max_d):
             fd.write(f"{i} {d:.6f} {md:.6f} {MD:.6f}\n")
@@ -249,7 +259,9 @@ def mine_hard_ids(cfg):
     feats, ids, _ = extract_features(model, dataset, feats_dim, cfg.batch_sz)
 
     print("Computing intra id distances...")
-    u_ids, feats_mean, dists, min_d, max_d = mean_features_vectorized(feats, ids)
+    u_ids, feats_mean, dists, min_d, max_d = mean_features_vectorized(feats, 
+                                                                      ids,
+                                                                      penalized=cfg.penalized)
 
     print("Computing inter id distances...")
     confused_ids, distractor_ids, confusing_dist =  inter_id_distances_vectorized(feats_mean, u_ids)
@@ -262,8 +274,8 @@ def mine_hard_ids(cfg):
     confused_ids = confused_ids.to("cpu").numpy()
     distractor_ids = distractor_ids.to("cpu").numpy()
     confusing_dist = confusing_dist.to("cpu").numpy()
-
-    save_intra(cfg.out_file, u_ids, dists, min_d, max_d)
+    
+    save_intra(cfg.out_file, u_ids, dists, min_d, max_d, penalized=cfg.penalized)
     save_inter(cfg.out_file, confused_ids, distractor_ids, confusing_dist)
 
 def get_basename(filename_plus_extension):
@@ -317,8 +329,17 @@ def parse_args():
                         default=None,
                         type=str)
 
+    parser.add_argument("--penalized",
+                        action="store_true",
+                        help="the intra distance computed will be the penalized intra distance")
+
     args = parser.parse_args()
+
     
+    # -- check peanlised -- #
+    if args.penalized:
+        print("\n[Warning:] the computed intra distance will be the penalized distance.")
+
     # -- Experiment output -- #
     if args.out_dir is None:
         args.out_dir = args.dataset

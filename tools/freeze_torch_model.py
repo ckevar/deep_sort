@@ -195,12 +195,12 @@ class MarsSmall128(nn.Module):
 
 """# Evaluation Utils """
 
-def extract_features(model, loader, feat_dim, num_cams=1):
+def extract_features(model, loader, feat_dim, num_cams=1, device="cpu"):
     model.eval()
     n_samples = len(loader.dataset)
 
     # Preallocate
-    feats = torch.zeros((n_samples, feat_dim))
+    feats = torch.zeros((n_samples, feat_dim), device=device)
     labels = torch.zeros(n_samples, dtype=torch.long)
 
     camids = None
@@ -211,7 +211,11 @@ def extract_features(model, loader, feat_dim, num_cams=1):
     with torch.no_grad():
         for imgs, lbls, cams in loader:
             imgs = imgs.cuda()
-            batch_feats = model(imgs, return_embedding=True).cpu()
+            batch_feats = model(imgs, return_embedding=True)
+
+            if "cpu" == device:
+                batch_feats = batch_feats.cpu()
+
             b = batch_feats.size(0)
 
             feats[ptr:ptr+b] = batch_feats
@@ -220,6 +224,12 @@ def extract_features(model, loader, feat_dim, num_cams=1):
 
             ptr += b
 
+    match device:
+        case "cuda":
+            labels = labels.to("cuda")
+        case "cpu":
+            feats = feats.cpu()
+            
     return feats, labels, camids
 
 from sklearn.metrics import average_precision_score
@@ -386,8 +396,10 @@ def evaluate_mAP_CMCD(config, model, feat_dims):
     gallery_loader = DataLoader(gallery_dataset,
                                 batch_size=config['evaluation']['batch_size'])
 
-    query_feats, query_ids, query_cams = extract_features(model, query_loader, feat_dims)
-    gallery_feats, gallery_ids, gallery_cams = extract_features(model, gallery_loader, feat_dims)
+    query_feats, query_ids, query_cams = \
+            extract_features(model, query_loader, feat_dims)
+    gallery_feats, gallery_ids, gallery_cams = \
+            extract_features(model, gallery_loader, feat_dims)
 
     # NOTE: The batch size might change in here if the GPU is not big enough
     return compute_cmc_map_in_gpu(
