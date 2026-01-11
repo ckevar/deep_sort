@@ -235,10 +235,9 @@ def inter_id_distances(anchor_feats, anchor_ids):
 
 def save_intra(outfile, ids, dists, min_d, max_d, penalized=False):
     
-    if penalized:
-        filename = f"{outfile}-intra_dist-penalized.txt"
-    else:
-        filename = f"{outfile}-intra_dist.txt"
+    filename = "{}-intra_dist{}".format(
+            outfile, 
+            "-penalized.txt" if penalized else ".txt")
 
     with open(filename, 'w') as fd:
         for i, d, md, MD in zip(ids, dists, min_d, max_d):
