@@ -201,19 +201,35 @@ def mean_features_vectorized(feats, ids, penalized=False):
 
     return uniq_ids, feats_mean, dists, min_dist, max_dist
 
-def inter_id_distances_vectorized(anchor_feats, anchor_ids):
-    dist = 1 - anchor_feats @ anchor_feats.T # Tensor: patches x ids 
+def inter_id_distances_vectorized(feats, feat_ids, centroids, centroid_ids):
+    if feats.device.type == "cpU": feats = feats.to("cuda")
+    if centroids.device.type == "cpu": centroids = centroids.to("cuda")
+
+    dist = 1 - feats @ centroids.T # Tensor: patches x ids 
+
+    centroids = centroids.to("cpu")
+    feats = feats.to("cpu")
+
     min_dist, min_indices = torch.min(dist, dim=1)
 
-    row_indices = torch.arange(dist.size(0), device=dist.device)
-    mask = min_indices != row_indices
+    # Centroids
+    if centroid_ids.device.type == "cpu": centroid_ids = centroid_ids.to("cuda")
+    predicted_closest_ids = centroid_ids[min_indices]
+    centroid_ids.to("cpu")
 
-    confused_ids = anchor_ids[mask]
-    distractor_ids = anchor_ids[min_indices][mask]
-    
+    # Hard Positivevs
+    if feat_ids.device.type == "cpu": feat_ids = feat_ids.to("cuda")
+    mask = predicted_closest_ids != feat_ids
+    confused_img_ids = feat_ids[mask]
+    feat_ids = feat_ids.to("cpu")
+
+    patch_row = torch.argwhere(mask).squeeze(1) + 1
+
+    # Hard Negatives
+    distractor_ids = predicted_closest_ids[mask]
     confusing_dist = min_dist[mask]
  
-    return confused_ids, distractor_ids, confusing_dist
+    return confused_img_ids, distractor_ids, confusing_dist, patch_row
 
 def inter_id_distances(anchor_feats, anchor_ids):
     
@@ -243,11 +259,11 @@ def save_intra(outfile, ids, dists, min_d, max_d, penalized=False):
         for i, d, md, MD in zip(ids, dists, min_d, max_d):
             fd.write(f"{i} {d:.6f} {md:.6f} {MD:.6f}\n")
 
-def save_inter(outfile, c_ids, d_ids, dists):
+def save_inter(outfile, c_ids, d_ids, dists, rows):
     filename = f"{outfile}-inter_dist.txt"
     with open(filename, 'w') as fd:
-        for ci, di, dd in zip(c_ids, d_ids, dists):
-            fd.write(f"{ci} {di} {dd:.6f}\n")
+        for ci, di, dd, row in zip(c_ids, d_ids, dists, rows):
+            fd.write(f"{ci} {di} {dd:.6f} {row}\n")
 
 def mine_hard_ids(cfg):
     model, image_shape = load_model(cfg)
@@ -258,24 +274,33 @@ def mine_hard_ids(cfg):
     feats, ids, _ = extract_features(model, dataset, feats_dim, cfg.batch_sz)
 
     print("Computing intra id distances...")
-    u_ids, feats_mean, dists, min_d, max_d = mean_features_vectorized(feats, 
-                                                                      ids,
-                                                                      penalized=cfg.penalized)
+    u_ids, feats_mean, dists, min_d, max_d = mean_features_vectorized(
+            feats, 
+            ids,
+            penalized=cfg.penalized)
+
+    u_ids_cpu = u_ids.to("cpu").numpy()
+    dists     = dists.to("cpu").numpy()
+    min_d     = min_d.to("cpu").numpy()
+    max_d     = max_d.to("cpu").numpy()
+ 
+    save_intra(cfg.out_file, u_ids, dists, min_d, max_d, penalized=cfg.penalized)
+    del u_ids_cpu, dists, min_d, max_d
 
     print("Computing inter id distances...")
-    confused_ids, distractor_ids, confusing_dist =  inter_id_distances_vectorized(feats_mean, u_ids)
+    confused_ids, distractor_ids, confusing_dist, patch_row =  inter_id_distances_vectorized(
+            feats,
+            ids,
+            feats_mean, 
+            u_ids)
 
-    print("Storing...")
-    u_ids = u_ids.to("cpu").numpy()
-    dists = dists.to("cpu").numpy()
-    min_d = min_d.to("cpu").numpy()
-    max_d = max_d.to("cpu").numpy()
     confused_ids = confused_ids.to("cpu").numpy()
     distractor_ids = distractor_ids.to("cpu").numpy()
     confusing_dist = confusing_dist.to("cpu").numpy()
     
-    save_intra(cfg.out_file, u_ids, dists, min_d, max_d, penalized=cfg.penalized)
-    save_inter(cfg.out_file, confused_ids, distractor_ids, confusing_dist)
+    save_inter(cfg.out_file, confused_ids, distractor_ids, confusing_dist, patch_row)
+
+    print(f"Saved in {cfg.out_file}*.txt")
 
 def get_basename(filename_plus_extension):
     fe = filename_plus_extension.split(".")
