@@ -24,22 +24,46 @@ def load_detector(detector_file):
     else:
         raise ValueError(f"Detector {detector_file} not supported.\n")
 
-def load_feature_extractor(feature_extractor_file):
-    if feature_extractor_file.endswith("pb"):
-        from tools.generate_detections import create_box_encoder
-        return create_box_encoder(feature_extractor_file, batch_size=32)
+def load_feature_extractor(fe_file, fe_cfg=None, fe_type="wrn"):
+    if fe_type == "wrn":
+        if fe_file.endswith("pb"):
+            from tools.generate_detections import create_box_encoder
+            return create_box_encoder(fe_file, batch_size=32)
 
-    elif feature_extractor_file.endswith("pth"):
-        from tools.generate_torch_detections import create_box_encoder
-        if "mot17" in feature_extractor_file: train_ids = 388
-        elif "kitti" in feature_extractor_file: train_ids = 451
-        elif "waymo" in feature_extractor_file: train_ids = 20982
-        else: raise ValueError(f"Model {feature_extractor_file} not supported, unknow train_ids.\n")
+        elif fe_file.endswith("pth"):
+            from tools.generate_torch_detections import create_box_encoder
+            if "mot17" in fe_file: train_ids = 388
+            elif "kitti" in fe_file: train_ids = 451
+            elif "waymo" in fe_file: train_ids = 20982
+            else: raise ValueError(f"Model {fe_file} not supported, unknow train_ids.\n")
+            return create_box_encoder(fe_file, train_ids, batch_size=128)
 
-        return create_box_encoder(feature_extractor_file, train_ids, batch_size=128)
+        else:
+            raise ValueError(f"Mode {fe_file} not supported.\n")
+
+    elif fe_type == "fastreid":
+        if fe_cfg is None:
+            raise ValueError("FastReID models need a *.yaml configuration file.\n")
+        
+        import sys
+        sys.path.append("trackers/BoostTrack")
+        sys.path.append("trackers/BoostTrack/tracker")
+        sys.path.append("trackers/BoostTrack/external")
+
+        print("\n\n\n")
+        print(sys.path)
+
+        from tracker.embedding import EmbeddingComputer
+        from default_settings import GeneralSettings
+
+        embedder = EmbeddingComputer(GeneralSettings['dataset'], GeneralSettings['test_dataset'], True)
+        embedder.load(fe_file, fe_cfg)
+
+        return embedder
 
     else:
-        raise ValueError(f"Mode {feature_extractor_file} not supported.\n")
+        raise ValueError(f"Feature extractor type {fe_type} not supported.\n")
+
  
 
 
@@ -189,8 +213,13 @@ def run(sequence_dir, data_type, detector, feature_extractor,
 
         detections = detector(frame, verbose=False)[0]
         detections, confs = unwrap_detections_ltwh_confs(detections, min_detection_height)
-
-        feats = feature_extractor(frame, detections)
+        
+        if hasattr(feature_extractor, "compute_embedding"):
+            boxes = detections
+            boxes[:, 2:4] += boxes[:, :2]
+            feats = feature_extractor.compute_embedding(frame, boxes, f"{sequence_dir}:{frame_idx}")
+        else:
+            feats = feature_extractor(frame, detections)
 
         # Load image and generate detections.
         detections = create_detections(detections, confs, feats)
@@ -300,6 +329,15 @@ def parse_args():
         "--load_feature_extractor", help="Feature extractor model file",
         default=None, required=True)
     parser.add_argument(
+        "--feature_extractor_cfg",
+        help="Path to the FastReID config file.",
+        type=str,
+        default=None)
+    parser.add_argument(
+        "--feature_extractor_type",
+        type=str,
+        default="wrn")
+    parser.add_argument(
         "--data_dir", help="Dataset directory, so far it supports, MOT17, "
         "KITTI and WaymoV2-MOT format", default=None, required=True)
     parser.add_argument(
@@ -351,7 +389,9 @@ if __name__ == "__main__":
     output_dir = mk_output_dir(args.data_dir, args.experiment_name)
     cache = Cache(args.experiment_name, args.overwrite)
     detector = load_detector(args.load_detector)
-    feature_extractor = load_feature_extractor(args.load_feature_extractor)
+    feature_extractor = load_feature_extractor(args.load_feature_extractor, 
+                                               args.feature_extractor_cfg,
+                                               args.feature_extractor_type)
 
     for seq_dir in sequences:
 
