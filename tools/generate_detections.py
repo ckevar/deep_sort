@@ -15,11 +15,9 @@ def _run_in_batches(f, data_dict, out, batch_size):
     for i in range(num_batches):
         s, e = i * batch_size, (i + 1) * batch_size
         batch_data_dict = {k: v[s:e] for k, v in data_dict.items()}
-        aux = f(batch_data_dict)
         out[s:e] = f(batch_data_dict)
     if e < len(out):
         batch_data_dict = {k: v[e:] for k, v in data_dict.items()}
-        aux = f(batch_data_dict)
         out[e:] = f(batch_data_dict)
 
 
@@ -48,12 +46,18 @@ def extract_image_patch(image, bbox, patch_shape):
 
     """
     bbox = np.array(bbox)
+    
+    """ Original: patch expansion
     if patch_shape is not None:
         # correct aspect ratio to patch shape
         target_aspect = float(patch_shape[1]) / patch_shape[0]
         new_width = target_aspect * bbox[3]
         bbox[0] -= (new_width - bbox[2]) / 2
         bbox[2] = new_width
+     End Patch expansion """
+    
+    """ New: non-expanded patch """
+    bbox[2:] = np.ceil(bbox[2:])
 
     # convert to top left, bottom right
     bbox[2:] += bbox[:2]
@@ -94,8 +98,10 @@ class ImageEncoder(object):
 
         exit()
         """
+        """ Debug Flatten layer
         self.loi = tf.compat.v1.get_default_graph().get_tensor_by_name(
                 "Flatten/flatten/Reshape:0")
+        """
 
         assert len(self.output_var.get_shape()) == 2
         assert len(self.input_var.get_shape()) == 4
@@ -105,7 +111,7 @@ class ImageEncoder(object):
     def __call__(self, data_x, batch_size=32):
         out = np.zeros((len(data_x), self.feature_dim), np.float32)
         _run_in_batches(
-            lambda x: self.session.run(self.loi, feed_dict=x),
+            lambda x: self.session.run(self.output_var, feed_dict=x),
             {self.input_var: data_x}, out, batch_size)
         return out
 
@@ -114,8 +120,6 @@ def create_box_encoder(model_filename, input_name="images",
                        output_name="features", batch_size=32):
     image_encoder = ImageEncoder(model_filename, input_name, output_name)
     image_shape = image_encoder.image_shape
-    print(f"image_shape {image_shape}")
-    exit(1)
 
     def encoder(image, boxes):
         image_patches = []

@@ -168,6 +168,7 @@ class MarsSmall128(nn.Module):
         #self.classifier = nn.Linear(128, num_classes)
 
     def forward(self, x, return_embedding=False):
+
         x = self.elu(self.conv1_bn(self.conv1(x)))
         x = self.elu(self.conv2_bn(self.conv2(x)))
         x = self.pool(x)
@@ -178,7 +179,7 @@ class MarsSmall128(nn.Module):
         x = self.res4(x)
         x = self.res5(x)
         x = self.res6(x)
-
+    
         x = x.permute(0, 2, 3, 1).contiguous().view(x.size(0), -1)
 
         x = self.dropout(x)
