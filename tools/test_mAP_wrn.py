@@ -78,7 +78,6 @@ def load_dataset(cfg, image_shape):
             transforms.Resize(image_shape),
             transforms.ToTensor(),
             transforms.Lambda(lambda x:x*255),
-            #transforms.Lambda(lambda x:x[[1, 2, 0], ...]) # RGB -> BGR
         ])
 
 
@@ -220,6 +219,18 @@ def compute_metrics(cfg):
 
     Q_feats, Q_ids, Q_cams = extract_features(model, query, feats_dim, bsz)
     G_feats, G_ids, G_cams = extract_features(model, gallery, feats_dim, bsz)
+
+    if cfg.save_features:
+        qf = Q_feats.numpy()
+        qi = Q_ids.numpy()
+        gf = G_feats.numpy()
+        gi = G_ids.numpy()
+        np.savez_compressed(
+            f"{cfg.save_features}.npz",
+            Q_feats = qf,
+            Q_ids = qi,
+            G_feats = gf,
+            G_ids = gi)
     
     return compute_cmc_map_in_gpu(
             Q_feats, Q_ids,
@@ -241,10 +252,18 @@ def parse_args():
     parser.add_argument("--num_classes",
                         help="Number of classes, optional, only for the torch version.",
                         default=1)
+
+    parser.add_argument("--save-features",
+                        help="it will save features using the file you set. --save-features path/to/features.*",
+                        default="default")
+
     parser.add_argument("--batch_sz",
                         help="batch size to evaluate",
                         default=512,
                         type=int)
+
+    args = parser.parse_args()
+
 
     return parser.parse_args()
 
@@ -252,4 +271,4 @@ def parse_args():
 if "__main__" == __name__:
     args = parse_args()    
     cmc, mAP = compute_metrics(args)
-    print(f"mAP: {mAP}, Rank-1: {cmc[0]}, Rank-5: {cmc[4]}, Rank-9:{cmc[9]}")
+    print(f"mAP: {mAP} | Rank-1: {cmc[0]} | Rank-5: {cmc[4]} | Rank-9: {cmc[9]}")

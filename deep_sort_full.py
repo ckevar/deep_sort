@@ -50,9 +50,6 @@ def load_feature_extractor(fe_file, fe_cfg=None, fe_type="wrn"):
         sys.path.append("trackers/BoostTrack/tracker")
         sys.path.append("trackers/BoostTrack/external")
 
-        print("\n\n\n")
-        print(sys.path)
-
         from tracker.embedding import EmbeddingComputer
         from default_settings import GeneralSettings
 
@@ -144,7 +141,7 @@ def unwrap_detections_ltwh_confs(detections, min_height):
     boxes[:, 2:4] = boxes[:, 2:4] - boxes[:, :2]
 
     out = torch.cat([boxes, confs], dim=1)
-    out = out[out[:, 3] > min_height, :]
+    out = out[out[:, 3] >= min_height, :]
     out = out.cpu().numpy()
 
     return out[:, :4], out[:, 4]
@@ -215,7 +212,7 @@ def run(sequence_dir, data_type, detector, feature_extractor,
         detections, confs = unwrap_detections_ltwh_confs(detections, min_detection_height)
         
         if hasattr(feature_extractor, "compute_embedding"):
-            boxes = detections
+            boxes = detections.copy()
             boxes[:, 2:4] += boxes[:, :2]
             feats = feature_extractor.compute_embedding(frame, boxes, f"{sequence_dir}:{frame_idx}")
         else:
@@ -336,7 +333,10 @@ def parse_args():
     parser.add_argument(
         "--feature_extractor_type",
         type=str,
+        help="This could be 'wrn' or 'fastreid'",
         default="wrn")
+
+
     parser.add_argument(
         "--data_dir", help="Dataset directory, so far it supports, MOT17, "
         "KITTI and WaymoV2-MOT format", default=None, required=True)

@@ -54,7 +54,7 @@ def extract_image_patch(image, bbox, patch_shape):
         new_width = target_aspect * bbox[3]
         bbox[0] -= (new_width - bbox[2]) / 2
         bbox[2] = new_width
-     End Patch expansion """
+    End Patch expansion """
     
     """ New: non-expanded patch """
     bbox[2:] = np.ceil(bbox[2:])
@@ -67,6 +67,7 @@ def extract_image_patch(image, bbox, patch_shape):
     bbox[:2] = np.maximum(0, bbox[:2])
     bbox[2:] = np.minimum(np.asarray(image.shape[:2][::-1]) - 1, bbox[2:])
     if np.any(bbox[:2] >= bbox[2:]):
+        print("we are returning None")
         return None
     sx, sy, ex, ey = bbox
     image = image[sy:ey, sx:ex]
@@ -88,20 +89,6 @@ class ImageEncoder(object):
             "%s:0" % input_name)
         self.output_var = tf.compat.v1.get_default_graph().get_tensor_by_name(
             "%s:0" % output_name)
-
-        """
-        graph = self.session.graph
-        for op in graph.get_operations():
-            print(op.name)
-            for tensor in op.outputs:
-                print("  ", tensor.name)
-
-        exit()
-        """
-        """ Debug Flatten layer
-        self.loi = tf.compat.v1.get_default_graph().get_tensor_by_name(
-                "Flatten/flatten/Reshape:0")
-        """
 
         assert len(self.output_var.get_shape()) == 2
         assert len(self.input_var.get_shape()) == 4

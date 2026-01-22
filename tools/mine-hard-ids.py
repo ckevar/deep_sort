@@ -96,6 +96,7 @@ def extract_features(model, loader, feat_dim, batch_sz):
     labels = torch.zeros(n_samples, dtype=torch.long, device="cuda")
 
     for imgs, lbls, cams in loader:
+        # NOTE: Models need to have their output normalised already.
         if model_in_pytorch:
             imgs = imgs.to("cuda")
             batch_feats = model(imgs, return_embedding=True)
@@ -188,6 +189,9 @@ def mean_features_vectorized(feats, ids, penalized=False):
 
     dists = sum_dist / counts.squeeze()
 
+    if penalized:
+        feats_mean = torch.nn.functional.normalize(feats_mean, p=2, dim=1)
+
     # -- Sort IDs by average distances -- #
     sorted_idx = torch.argsort(dists, descending=True)
     uniq_ids = uniq_ids[sorted_idx]
@@ -196,40 +200,62 @@ def mean_features_vectorized(feats, ids, penalized=False):
     min_dist = min_dist[sorted_idx]
     max_dist = max_dist[sorted_idx]
 
-    if penalized:
-        feats_mean = torch.nn.functional.normalize(feats_mean, p=2, dim=1)
-
     return uniq_ids, feats_mean, dists, min_dist, max_dist
 
 def inter_id_distances_vectorized(feats, feat_ids, centroids, centroid_ids):
-    if feats.device.type == "cpU": feats = feats.to("cuda")
-    if centroids.device.type == "cpu": centroids = centroids.to("cuda")
 
-    dist = 1 - feats @ centroids.T # Tensor: patches x ids 
+    if feats.device.type    == "cuda": feats = feats.to("cpu")
+    if feat_ids.device.type == "cuda": feat_ids = feat_ids.to("cpu")
 
-    centroids = centroids.to("cpu")
-    feats = feats.to("cpu")
-
-    min_dist, min_indices = torch.min(dist, dim=1)
-
-    # Centroids
+    if centroids.device.type    == "cpu": centroids = centroids.to("cuda")
     if centroid_ids.device.type == "cpu": centroid_ids = centroid_ids.to("cuda")
-    predicted_closest_ids = centroid_ids[min_indices]
-    centroid_ids.to("cpu")
 
-    # Hard Positivevs
-    if feat_ids.device.type == "cpu": feat_ids = feat_ids.to("cuda")
-    mask = predicted_closest_ids != feat_ids
-    confused_img_ids = feat_ids[mask]
-    feat_ids = feat_ids.to("cpu")
+    confused_img_ids = []
+    patch_row        = []
+    distractor_ids   = []
+    confusing_dist   = []
 
-    patch_row = torch.argwhere(mask).squeeze(1) + 1
+    # --- chunk_size Calculation
+    # x*19615*4 __ -Memory Needed
+    #  \  \    \    in GB this is divided by 1024^3
+    #   \  \    \_ -32 bits
+    #    \  \_____ -number of ids in waymov2 gallery
+    #     \_______ -chunk size (~49664, 90 times 512), this accounts for potential
+    #               potential extra space needed in the gpu for other calculations
+    #
+    chunk_size = 23040
+    # ---
 
-    # Hard Negatives
-    distractor_ids = predicted_closest_ids[mask]
-    confusing_dist = min_dist[mask]
+    for i in range(0, feats.size(0), chunk_size):
+        batch_feats    = feats[i:i + chunk_size].to("cuda")
+        batch_feats_id = feat_ids[i:i + chunk_size].to("cuda") 
+
+        dist = 1 - batch_feats @ centroids.T # Tensor: patches x ids 
+        del batch_feats
+
+        min_dist, min_indices = torch.min(dist, dim=1)
+        del dist
+
+        # Centroids
+        predicted_closest_ids = centroid_ids[min_indices]
+
+        # Hard Positivevs
+        mask = predicted_closest_ids != batch_feats_id
+
+        if mask.any():
+            confused_img_ids.append(batch_feats_id[mask])
+
+            patch_row_local = torch.argwhere(mask).squeeze(1) + 1
+            patch_row.append(patch_row_local)
+
+            # Hard Negatives
+            distractor_ids.append(predicted_closest_ids[mask])
+            confusing_dist.append(min_dist[mask])
  
-    return confused_img_ids, distractor_ids, confusing_dist, patch_row
+    return torch.cat(confused_img_ids), \
+           torch.cat(distractor_ids),   \
+           torch.cat(confusing_dist),   \
+           torch.cat(patch_row)
 
 def inter_id_distances(anchor_feats, anchor_ids):
     
@@ -275,9 +301,9 @@ def mine_hard_ids(cfg):
 
     print("Computing intra id distances...")
     u_ids, feats_mean, dists, min_d, max_d = mean_features_vectorized(
-            feats, 
-            ids,
-            penalized=cfg.penalized)
+        feats, 
+        ids,
+        penalized=cfg.penalized)
 
     u_ids_cpu = u_ids.to("cpu").numpy()
     dists     = dists.to("cpu").numpy()
@@ -289,10 +315,10 @@ def mine_hard_ids(cfg):
 
     print("Computing inter id distances...")
     confused_ids, distractor_ids, confusing_dist, patch_row =  inter_id_distances_vectorized(
-            feats,
-            ids,
-            feats_mean, 
-            u_ids)
+        feats,
+        ids,
+        feats_mean, 
+        u_ids)
 
     confused_ids = confused_ids.to("cpu").numpy()
     distractor_ids = distractor_ids.to("cpu").numpy()
@@ -355,7 +381,7 @@ def parse_args():
 
     parser.add_argument("--penalized",
                         action="store_true",
-                        help="the intra distance computed will be the penalized intra distance")
+                        help="the intra distance computed will be the penalized intra distance.")
 
     args = parser.parse_args()
 
