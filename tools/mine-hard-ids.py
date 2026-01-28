@@ -274,6 +274,17 @@ def inter_id_distances(anchor_feats, anchor_ids):
 
     return confused_ids, distractor_ids, confusing_dist
 
+def save_features(outfile, feats, ids):
+    filename = f"{outfile}-features.npz"
+    feats_cpu = feats.to("cpu").numpy()
+    ids_cpu = ids.to("cpu").numpy()
+
+    np.savez_compressed(filename,
+                        feats=feats_cpu,
+                        ids=ids_cpu)
+
+    del feats_cpu
+    del ids_cpu
 
 def save_intra(outfile, ids, dists, min_d, max_d, penalized=False):
     
@@ -298,6 +309,9 @@ def mine_hard_ids(cfg):
     
     print("\nExtracting features...")
     feats, ids, _ = extract_features(model, dataset, feats_dim, cfg.batch_sz)
+
+    if cfg.save_features:
+        save_features(cfg.out_file, feats, ids)
 
     print("Computing intra id distances...")
     u_ids, feats_mean, dists, min_d, max_d = mean_features_vectorized(
@@ -382,6 +396,10 @@ def parse_args():
     parser.add_argument("--penalized",
                         action="store_true",
                         help="the intra distance computed will be the penalized intra distance.")
+
+    parser.add_argument("--save-features",
+                        action="store_true",
+                        help="save the raw features")
 
     args = parser.parse_args()
 

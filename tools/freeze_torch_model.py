@@ -189,7 +189,7 @@ class MarsSmall128(nn.Module):
         x = self.fc(x)
         x = self.bn(x) # If you want to extract features from the center, you 
                        # have to scale up this, scale factor = 16*8/mask_where_ones_are
-        x = self.elu(x)
+        #x = self.elu(x)
 
         x = F.normalize(x, p=2, dim=1)
 

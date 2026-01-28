@@ -141,7 +141,7 @@ def unwrap_detections_ltwh_confs(detections, min_height):
     boxes[:, 2:4] = boxes[:, 2:4] - boxes[:, :2]
 
     out = torch.cat([boxes, confs], dim=1)
-    out = out[out[:, 3] >= min_height, :]
+    out = out[out[:, 3] > min_height, :]
     out = out.cpu().numpy()
 
     return out[:, :4], out[:, 4]
