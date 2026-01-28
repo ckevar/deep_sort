@@ -693,13 +693,6 @@ class TripletLoss(torch.nn.Module):
 
             # max(0, hardest_pos - hardest_neg + margin), makes zero once it reaches the margin
             triplet_loss = F.relu(hardest_pos - hardest_neg + self.margin)
-            --------------------------- H. POS
-            --------------- H. NEG 
-            DH > 0
-
-            --------------- H. POS
-            --------------------------- H. NEG 
-            DH < 0
 
             if triplet_loss > 0:
                 loss += triplet_loss
