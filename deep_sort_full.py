@@ -53,7 +53,9 @@ def load_feature_extractor(fe_file, fe_cfg=None, fe_type="wrn"):
         from tracker.embedding import EmbeddingComputer
         from default_settings import GeneralSettings
 
-        embedder = EmbeddingComputer(GeneralSettings['dataset'], GeneralSettings['test_dataset'], True)
+        embedder = EmbeddingComputer(GeneralSettings['dataset'], 
+                                     GeneralSettings['test_dataset'], 
+                                     True)
         embedder.load(fe_file, fe_cfg)
 
         return embedder

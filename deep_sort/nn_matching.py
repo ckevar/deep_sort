@@ -92,8 +92,11 @@ def _nn_cosine_distance(x, y):
         smallest cosine distance to a sample in `x`.
 
     """
+    x = np.asarray(x)
+    x = x.mean(axis=0, keepdims=True)
     distances = _cosine_distance(x, y)
-    return distances.min(axis=0)
+    # return distances.min(axis=0)
+    return distances[0]
 
 
 class NearestNeighborDistanceMetric(object):
@@ -175,7 +178,10 @@ class NearestNeighborDistanceMetric(object):
         for i, target in enumerate(targets):
             cost_matrix[i, :] = self._metric(self.samples[target], features)
         
-        print(cost_matrix)
-        exit(1)
+        # --- NOTE: debug, DEBUG: note --- #
+        # This allows us to see initial embedding costs.
+        #print(cost_matrix)
+        #exit(1)
+        # ---
 
         return cost_matrix

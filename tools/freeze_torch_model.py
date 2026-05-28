@@ -166,10 +166,6 @@ class MarsSmall128(nn.Module):
         self.classifier = CosineClassifier(128, num_classes)
         #self.classifier = nn.Linear(128, num_classes)
         
-        # If Mask for center only features are required
-        #self.mask = torch.zeros(1, 1, 16, 8, device="cuda")
-        #self.mask[:,:,7:9,3:5] = 1.0 # 
-
     def forward(self, x, return_embedding=False):
 
         x = self.elu(self.conv1_bn(self.conv1(x)))
@@ -183,13 +179,12 @@ class MarsSmall128(nn.Module):
         x = self.res5(x)
         x = self.res6(x)
     
-        # x = x * self.mask # for center only features
         x = x.permute(0, 2, 3, 1).contiguous().view(x.size(0), -1)
         x = self.dropout(x)
         x = self.fc(x)
-        x = self.bn(x) # If you want to extract features from the center, you 
-                       # have to scale up this, scale factor = 16*8/mask_where_ones_are
-        #x = self.elu(x)
+        x = self.bn(x)
+
+        #x = self.elu(x)    # ELU limits the feature extraction.
 
         x = F.normalize(x, p=2, dim=1)
 

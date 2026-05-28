@@ -297,6 +297,14 @@ def save_intra(outfile, ids, dists, min_d, max_d, penalized=False):
             fd.write(f"{i} {d:.6f} {md:.6f} {MD:.6f}\n")
 
 def save_inter(outfile, c_ids, d_ids, dists, rows):
+    """
+    It saves in `{outfile}-inter_dist` the following:
+    - c_ids: the struggling image patch (Hard Positive Patch)
+    - d_ids: the centroid of attractor instance (Hard Negative ID)
+    - dists: the distance between the struggling patch and the attractor.
+    - rows: line number of the struggling patch in the map file (starts at 1).
+    """
+
     filename = f"{outfile}-inter_dist.txt"
     with open(filename, 'w') as fd:
         for ci, di, dd, row in zip(c_ids, d_ids, dists, rows):
